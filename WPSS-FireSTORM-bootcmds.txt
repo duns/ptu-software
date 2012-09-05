@@ -1,0 +1,1 @@
+setenv optargs mem=93M@0x80000000 mem=128M@0x88000000 
