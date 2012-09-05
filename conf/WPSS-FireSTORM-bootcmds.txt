@@ -1,1 +1,3 @@
 setenv optargs mem=93M@0x80000000 mem=128M@0x88000000 
+if run loaduimage ; then run mmcboot; else run nandboot; fi;
+
