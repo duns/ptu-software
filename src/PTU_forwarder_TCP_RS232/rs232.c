@@ -109,6 +109,7 @@ int OpenComport(int comport_number, int baudrate)
                    break;
   }
 
+  printf("opening port %s\n",comports[comport_number]);
   Cport[comport_number] = open(comports[comport_number], O_RDWR | O_NOCTTY | O_NDELAY);
   if(Cport[comport_number]==-1)
   {
