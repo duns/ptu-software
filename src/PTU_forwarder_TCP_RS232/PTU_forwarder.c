@@ -188,14 +188,14 @@ void init()
 		reg_lvls[i].lvl = MID_LVL;
 	}
 
-	#ifdef TCP_CONN
-    init_tcp_conn();
-	#endif
-
 	if( init_serial() != 1) 
     {
         exit(-1);
     }
+	#ifdef TCP_CONN
+    init_tcp_conn();
+	#endif
+
 
 	write_dos_id ();
 }
