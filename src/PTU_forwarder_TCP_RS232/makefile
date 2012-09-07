@@ -3,6 +3,7 @@
 ################################################################################
 
 INSTALL?=install
+TARGET_CC_ARCH += "${LDFLAGS}" 
 
 RM := rm -rf
 
@@ -51,7 +52,7 @@ all: PTU_forwarder_TCP_RS232
 PTU_forwarder_TCP_RS232: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C Linker'
-	${CC} -o "PTU_forwarder_TCP_RS232" $(OBJS) $(USER_OBJS) $(LIBS)
+	${CC} -o "PTU_forwarder_TCP_RS232" $(OBJS) $(USER_OBJS) $(LIBS) ${LDFLAGS}
 	@echo 'Finished building target: $@'
 	@echo ' '
 
