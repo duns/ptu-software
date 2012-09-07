@@ -1,0 +1,38 @@
+UnitName: PTU1234
+ServerIP: 10.1.4.129
+ServerPort: 10123
+SerialPortNum: 4
+SerialPortBaud: 9600
+DosimeterID: 654321
+#Temperature
+SamplingRate: 60000
+UpLevel: 100.000000
+DownLevel: 50.000000
+#Humidity
+SamplingRate: 60000
+UpLevel: 130.000000
+DownLevel: 50.000000
+#O2
+SamplingRate: 55000
+UpLevel: 100.000000
+DownLevel: 50.000000
+#CO2
+SamplingRate: 55000
+UpLevel: 100.000000
+DownLevel: 50.000000
+#HeartRate
+SamplingRate: 50000
+UpLevel: 100.000000
+DownLevel: 50.000000
+#DoseAccum
+SamplingRate: 10000
+UpLevel: 100.000000
+DownLevel: 50.000000
+#DoseRate
+SamplingRate: 50000
+UpLevel: 100.000000
+DownLevel: 50.000000
+#BodyTemperature
+SamplingRate: 15000
+UpLevel: 100.000000
+DownLevel: 50.000000
