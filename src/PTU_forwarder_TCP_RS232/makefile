@@ -62,11 +62,11 @@ clean:
 
 
 install: PTU_forwarder_TCP_RS232
-	$(INSTALL) -d ${PREFIX}/bin/PTU_forwarder_TCP_RS232
+	$(INSTALL) -d ${DESTDIR}/bin/PTU_forwarder_TCP_RS232
    
-	$(INSTALL) -m 755 PTU_forwarder_TCP_RS232 ${PREFIX}/bin/PTU_forwarder_TCP_RS232
+	$(INSTALL) -m 755 PTU_forwarder_TCP_RS232 ${DESTDIR}/bin/PTU_forwarder_TCP_RS232
        
-	$(INSTALL) -m 755 config.txt ${PREFIX}/bin/PTU_forwarder_TCP_RS232
+	$(INSTALL) -m 755 config.txt ${DESTDIR}/bin/PTU_forwarder_TCP_RS232
 
 	
 
