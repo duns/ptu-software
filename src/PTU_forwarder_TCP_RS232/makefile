@@ -2,7 +2,8 @@
 # Automatically-generated file. Do not edit!
 ################################################################################
 
-INSTALL=install
+INSTALL?=install
+TARGET_CC_ARCH += "${LDFLAGS}" 
 
 RM := rm -rf
 
@@ -29,7 +30,7 @@ C_DEPS += \
 %.o: ../%.c
 	@echo 'Building file: $<'
 	@echo 'Invoking: GCC C Compiler'
-	gcc -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -o "$@" "$<"
+	${CC} -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 
@@ -51,7 +52,7 @@ all: PTU_forwarder_TCP_RS232
 PTU_forwarder_TCP_RS232: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C Linker'
-	gcc  -o "PTU_forwarder_TCP_RS232" $(OBJS) $(USER_OBJS) $(LIBS)
+	${CC} -o "PTU_forwarder_TCP_RS232" $(OBJS) $(USER_OBJS) $(LIBS) ${LDFLAGS}
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -62,11 +63,11 @@ clean:
 
 
 install: PTU_forwarder_TCP_RS232
-	$(INSTALL) -d ${DESTDIR}/bin/PTU_forwarder_TCP_RS232
+	$(INSTALL) -d ${DESTDIR}/bin
    
-	$(INSTALL) -m 755 PTU_forwarder_TCP_RS232 ${DESTDIR}/bin/PTU_forwarder_TCP_RS232
+	$(INSTALL) -m 755 PTU_forwarder_TCP_RS232 ${DESTDIR}/bin
        
-	$(INSTALL) -m 755 config.txt ${DESTDIR}/bin/PTU_forwarder_TCP_RS232
+	#$(INSTALL) -m 755 ptu_forwarder.conf ${DESTDIR}/etc/ptu_forwarder.conf
 
 	
 

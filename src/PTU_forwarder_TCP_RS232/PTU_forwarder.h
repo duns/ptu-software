@@ -1,4 +1,4 @@
-#define CONF_FILE_NAME "config.txt"
+#define CONF_FILE_NAME "/etc/ptu_forwarder.conf"
 #define SERIAL_PORT_NUM "SerialPortNum: %d\n"
 #define SERIAL_PORT_BAUD "SerialPortBaud: %d\n"
 #define UNIT_NAME_SET_LINE "UnitName: %s\n"
