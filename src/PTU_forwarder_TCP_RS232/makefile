@@ -64,6 +64,7 @@ clean:
 
 install: PTU_forwarder_TCP_RS232
 	$(INSTALL) -d ${DESTDIR}/bin
+	$(INSTALL) -d ${DESTDIR}/etc/init.d
    
 	$(INSTALL) -m 755 PTU_forwarder_TCP_RS232 ${DESTDIR}/bin
 	$(INSTALL) -m 755 ptu_forwarder ${DESTDIR}/etc/init.d/
