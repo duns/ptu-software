@@ -25,8 +25,13 @@ test -x $DAEMON || exit 0
 #	Function that starts the daemon/service.
 #
 d_start() {
+	if start-stop-daemon --start --quiet --make-pidfile --background --pidfile $PIDFILE \
+		--user $USER --exec $DAEMON -- $DAEMON_OPTS > /dev/null ;then
 	start-stop-daemon --start --quiet --make-pidfile --background --pidfile $PIDFILE \
 		--user $USER --exec $DAEMON -- $DAEMON_OPTS
+		else
+			echo PTU_forwarder_TCP_RS232 already running
+	fi
 }
 
 #
