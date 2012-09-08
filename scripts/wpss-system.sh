@@ -36,6 +36,7 @@ case "$1" in
 		gpio_out ${WPSS_SWITCH_5V}
 		gpio_set ${WPSS_SWITCH_5V} 0
 		gpio_export ${WPSS_SWITCH_5V}
+		echo none > ${WPSS_LED_NET}/trigger
 		;;
 esac
 
