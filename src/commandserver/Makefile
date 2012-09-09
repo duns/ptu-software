@@ -10,6 +10,7 @@ all : commandserver
 commandserver : $(OBJ)
 #	$(CC) $(CFLAGS) $^ $(LDFLAGS)
 	cp commandserver.sh commandserver
+	chmod 755 commandserver
 
 install:
 	install -m 0755 -d     ${DESTDIR}/etc/init.d
