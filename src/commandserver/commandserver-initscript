@@ -13,8 +13,9 @@ set -e
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DESC="commandserver daemon"
 NAME="commandserver"
-DAEMON=/usr/local/sbin/$NAME
-DAEMON_OPTS=/etc/commandserver.conf
+SCRIPT=/usr/local/sbin/$NAME
+DAEMON=/bin/bash
+DAEMON_OPTS="$SCRIPT /etc/commandserver.conf"
 PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
 USER=root
@@ -26,8 +27,8 @@ test -x $DAEMON || exit 0
 #	Function that starts the daemon/service.
 #
 d_start() {
-	if start-stop-daemon --start --quiet --make-pidfile --background --pidfile $PIDFILE \
-		--user $USER --exec $DAEMON -- $DAEMON_OPTS > /dev/null ;then
+	if start-stop-daemon --start --quiet --test --pidfile $PIDFILE \
+		--user $USER --exec $DAEMON -- $DAEMON_OPTS  > /dev/null ;then
 	start-stop-daemon --start --quiet --make-pidfile --background --pidfile $PIDFILE \
 		--user $USER --exec $DAEMON -- $DAEMON_OPTS
 		else

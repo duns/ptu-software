@@ -7,7 +7,11 @@ PIPENAME=/tmp/commandserver.fifo
 PIPEFD=7
 . $CONFFILE
 KEYCODES="$PWRBTNKEYCODE $VOLUMEUPKEYCODE $VOLUMEDOWNKEYCODE $PANICKEYCODE $CALLCKEYCODE"
-ECHO=echo
+ECHO=true
+execcmd()
+{
+	echo $@ | /bin/sh &
+}
 #ECHO=true
 test_time_elapsed()
 {
@@ -67,7 +71,6 @@ eventhandler()
 
 							$PWRBTNKEYCODE)
 								${ECHO} powerbutton pressed
-								BUTTONDOWN[$CODE]=2
 						       ;;
 							$VOLUMEUPKEYCODE)
 								${ECHO} volume up pressed
@@ -82,6 +85,7 @@ eventhandler()
 								${ECHO} call pressed
 							;;
 						esac
+						BUTTONDOWN[$CODE]=2
 					fi
 					if [ ${BUTTONDOWN[$CODE]} == 0 ];then
 						if [ ${BUTTONIGNORE[$CODE]} -eq 0 ];then
@@ -89,19 +93,23 @@ eventhandler()
 
 								$PWRBTNKEYCODE)
 									${ECHO} powerbutton released
-									$PWRBTNSHORTPRESSCMD
+									execcmd $PWRBTNSHORTPRESSCMD 
 						       		;;
 								$VOLUMEUPKEYCODE)
 									${ECHO} volume up released
+									execcmd $VOLUMEUPSHORTPRESSCMD 
 								;;
 								$VOLUMEDOWNKEYCODE)
 									${ECHO} volume down released
+									execcmd $VOLUMEDOWNSHORTPRESSCMD 
 								;;
 								$PANICKEYCODE)
 									${ECHO} panic released
+									execcmd $PANICSHORTPRESSCMD 
 								;;
 									$CALLCKEYCODE)
 									${ECHO} call released
+									execcmd $CALLSHORTPRESSCMD 
 								;;
 							esac
 						fi
@@ -117,21 +125,32 @@ eventhandler()
 									BUTTONDOWN[$CODE]=-1
 									BUTTONIGNORE[$CODE]=1
 									echo calling powerdown
-									$PWRBTNLONGPRESSCMD
+									execcmd $PWRBTNLONGPRESSCMD 
 								fi
 						       ;;
-							$VOLUMEUPKEYCODE)
-								echo volume up long press
-							;;
-							$VOLUMEDOWNKEYCODE)
-								echo volume down  long press
-							;;
-							$PANICKEYCODE)
-								echo panic long  press
-							;;
-							$CALLCKEYCODE)
-								echo call long press
-							;;
+							*)
+								if  test_time_elapsed $TIME ${BUTTONPRESSTIME[$CODE]} $LONGPRESSSECS  ;then
+									case $CODE in
+										$VOLUMEUPKEYCODE)
+											${ECHO} volume up long press
+											execcmd $VOLUMEUPLONGPRESSCMD
+											;;
+										$VOLUMEDOWNKEYCODE)
+											${ECHO} volume down  long press
+											execcmd $VOLUMEDOWNSHORTPRESSCMD
+											;;
+										$PANICKEYCODE)
+											${ECHO} panic long  press
+											execcmd $PANICLONGPRESSCMD
+											;;
+										$CALLCKEYCODE)
+											${ECHO} call long press
+											execcmd $CALLLONGPRESSCMD
+											;;
+									esac
+									BUTTONDOWN[$CODE]=-1
+									BUTTONIGNORE[$CODE]=1
+								fi
 						esac
 					fi
 				done

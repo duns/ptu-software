@@ -25,7 +25,7 @@ test -x $DAEMON || exit 0
 #	Function that starts the daemon/service.
 #
 d_start() {
-	if start-stop-daemon --start --quiet --make-pidfile --background --pidfile $PIDFILE \
+	if start-stop-daemon --start --quiet --test --pidfile $PIDFILE \
 		--user $USER --exec $DAEMON -- $DAEMON_OPTS > /dev/null ;then
 	start-stop-daemon --start --quiet --make-pidfile --background --pidfile $PIDFILE \
 		--user $USER --exec $DAEMON -- $DAEMON_OPTS
