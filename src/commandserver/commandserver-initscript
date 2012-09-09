@@ -1,0 +1,70 @@
+#! /bin/sh
+#
+# commandserver			commandserver daemon
+#				Daemon to watch for button presses and commands from network
+#
+# Authors:	 Christos Papachristou <papachristou@novocaptis.com>
+#
+# Version:	0.1
+#
+
+set -e
+
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+DESC="commandserver daemon"
+NAME="commandserver"
+DAEMON=/usr/local/sbin/$NAME
+PIDFILE=/var/run/$NAME.pid
+SCRIPTNAME=/etc/init.d/$NAME
+USER=root
+
+# Gracefully exit if the package has been removed.
+test -x $DAEMON || exit 0
+
+#
+#	Function that starts the daemon/service.
+#
+d_start() {
+	if start-stop-daemon --start --quiet --make-pidfile --background --pidfile $PIDFILE \
+		--user $USER --exec $DAEMON -- $DAEMON_OPTS > /dev/null ;then
+	start-stop-daemon --start --quiet --make-pidfile --background --pidfile $PIDFILE \
+		--user $USER --exec $DAEMON -- $DAEMON_OPTS
+		else
+			echo $NAME already running
+	fi
+}
+
+#
+#	Function that stops the daemon/service.
+#
+d_stop() {
+	start-stop-daemon --stop --quiet --pidfile $PIDFILE \
+		 --oknodo --user $USER --exec $DAEMON
+}
+
+
+case "$1" in
+  start)
+	echo -n "Starting $DESC: $NAME"
+	d_start
+	echo "."
+	;;
+  stop)
+	echo -n "Stopping $DESC: $NAME"
+	d_stop
+	echo "."
+	;;
+  restart|force-reload)
+	echo -n "Restarting $DESC: $NAME"
+	d_stop
+	sleep 1
+	d_start
+	echo "."
+	;;
+  *)
+	echo "Usage: $SCRIPTNAME {start|stop|restart|force-reload}" >&2
+	exit 1
+	;;
+esac
+
+exit 0

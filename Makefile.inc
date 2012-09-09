@@ -12,4 +12,3 @@ ECHO	?= echo
 SHELL	?= /bin/sh
 INSTALL ?= install
 
-.SILENT :

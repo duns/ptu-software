@@ -1,24 +1,26 @@
 include ../Makefile.inc
 
-DIRS	= PTU_forwarder_TCP_RS232
-EXE	= PTU_forwarder_TCP_RS232
+SUBDIRS	= PTU_forwarder_TCP_RS232 commandserver
+.PHONY: all clean install subdirs $(SUBDIRS)
+TARGET=asd
 
-all : $(EXE)
+all : subdirs
 
-PTU_forwarder_TCP_RS232 : force_look
-		$(ECHO) looking into PTU_forwarder_TCP_RS232 : $(MAKE) $(MFLAGS)
-		cd PTU_forwarder_TCP_RS232; $(MAKE) $(MFLAGS)
+subdirs : $(SUBDIRS)
 
-clean : force_look
-		$(ECHO) cleaning up in PTU_forwarder_TCP_RS232: $(MAKE) $(MFLAGS) clean
-		cd PTU_forwarder_TCP_RS232; $(MAKE) $(MFLAGS) clean
-#		-$(RM) -f $(EXE) $(OBJS) $(OBJLIBS)
-#		-for d in $(DIRS); do (cd $$d; $(MAKE) clean ); done
+$(SUBDIRS):
+	$(MAKE) $(MFLAGS) -C $@ 
 
-install : force_look
-		$(ECHO) looking into PTU_forwarder_TCP_RS232 : $(MAKE) $(MFLAGS) install
-		cd PTU_forwarder_TCP_RS232; $(MAKE) $(MFLAGS) install
+
+clean : 
+	for dir in $(SUBDIRS); \
+	do \
+	$(MAKE) $(MFLAGS) -C $$dir clean; \
+	done
+
+install : 
+	for dir in $(SUBDIRS); \
+	do \
+	$(MAKE) $(MFLAGS) -C $$dir install; \
+	done
 		
-force_look :
-		true
-.PHONY: all clean install
