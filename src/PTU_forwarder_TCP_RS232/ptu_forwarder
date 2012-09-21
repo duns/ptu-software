@@ -10,6 +10,7 @@
 
 set -e
 
+. /etc/profile
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DESC="ptu-forwarder daemon"
 NAME="PTU_forwarder_TCP_RS232"
@@ -17,7 +18,7 @@ DAEMON=/usr/local/bin/$NAME
 PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
 USER=root
-
+	
 # Gracefully exit if the package has been removed.
 test -x $DAEMON || exit 0
 
@@ -27,6 +28,18 @@ test -x $DAEMON || exit 0
 d_start() {
 	if start-stop-daemon --start --quiet --test --pidfile $PIDFILE \
 		--user $USER --exec $DAEMON -- $DAEMON_OPTS > /dev/null ;then
+	
+	echo Turn off 3.3V supply
+	gpio_set 21 0
+	echo Turn off 5V supply
+	gpio_set 22 0
+	echo sleep for 0.5 secs
+	sleep 0.5
+	echo Turn on 3.3V supply
+	gpio_set 21 1
+	echo Turn on 5V supply
+	gpio_set 22 1
+	
 	start-stop-daemon --start --quiet --make-pidfile --background --pidfile $PIDFILE \
 		--user $USER --exec $DAEMON -- $DAEMON_OPTS
 		else
