@@ -14,6 +14,8 @@ case "$1" in
 		gpio_export ${WPSS_SWITCH_5V}
 		gpio_out ${WPSS_SWITCH_5V}
 		gpio_set ${WPSS_SWITCH_5V} 1
+		echo "enabling gpio12 as input "
+		devmem2 0x480025D8 h 0x10c
 
 
 		echo heartbeat > ${WPSS_LED_STAT}/trigger
