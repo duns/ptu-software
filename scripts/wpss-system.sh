@@ -37,8 +37,13 @@ case "$1" in
 		echo "disabling gpio ${WPSS_SWITCH_5V} (5V enable)"
 		gpio_out ${WPSS_SWITCH_5V}
 		gpio_set ${WPSS_SWITCH_5V} 0
-		gpio_export ${WPSS_SWITCH_5V}
-		echo none > ${WPSS_LED_NET}/trigger
+		gpio_unexport ${WPSS_SWITCH_5V}
+
+		echo default-on > ${WPSS_LED_NET}/trigger
+#		echo heartbeat > ${WPSS_LED_BLUE}/trigger
+		echo default-on > ${WPSS_LED_BAT}/trigger
+		echo default-on > ${WPSS_LED_CON}/trigger
+
 		;;
 esac
 
