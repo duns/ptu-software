@@ -5,6 +5,8 @@ LIBS	= -L. -lsub -lsuba -lsubsub
 
 all : src
 
+boot.scr :
+	cd conf; mkimage -T script -C none -n 'WPSS phase2 FireSTORM' -d WPSS-FireSTORM-bootcmds.txt boot.scr
 src : force_look
 		$(ECHO) looking into src: $(MAKE) $(MFLAGS)
 		cd src; $(MAKE) $(MFLAGS)
