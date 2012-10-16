@@ -32,7 +32,7 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-bin_PROGRAMS = tcpvideosource$(EXEEXT)
+bin_PROGRAMS = videosource$(EXEEXT)
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
@@ -51,10 +51,10 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
-am_tcpvideosource_OBJECTS = src/tcpvideosource.$(OBJEXT)
-tcpvideosource_OBJECTS = $(am_tcpvideosource_OBJECTS)
+am_videosource_OBJECTS = src/videosource.$(OBJEXT)
+videosource_OBJECTS = $(am_videosource_OBJECTS)
 am__DEPENDENCIES_1 =
-tcpvideosource_DEPENDENCIES = $(am__DEPENDENCIES_1)
+videosource_DEPENDENCIES = $(am__DEPENDENCIES_1)
 DEFAULT_INCLUDES = -I.@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -68,8 +68,8 @@ COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
-SOURCES = $(tcpvideosource_SOURCES)
-DIST_SOURCES = $(tcpvideosource_SOURCES)
+SOURCES = $(videosource_SOURCES)
+DIST_SOURCES = $(videosource_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -181,8 +181,8 @@ AUTOMAKE_OPTIONS = foreign subdir-objects
 ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS} 
 CFLAGS = -I/usr/include/boost
 AM_CPPFLAGS = $(DEPS_CFLAGS)
-tcpvideosource_SOURCES = src/tcpvideosource.cpp src/tcpvideosource.hpp src/gst-common.hpp
-tcpvideosource_LDADD = $(DEPS_LIBS)
+videosource_SOURCES = src/videosource.cpp src/videosource.hpp src/gst-common.hpp
+videosource_LDADD = $(DEPS_LIBS)
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -280,20 +280,20 @@ src/$(am__dirstamp):
 src/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) src/$(DEPDIR)
 	@: > src/$(DEPDIR)/$(am__dirstamp)
-src/tcpvideosource.$(OBJEXT): src/$(am__dirstamp) \
+src/videosource.$(OBJEXT): src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
-tcpvideosource$(EXEEXT): $(tcpvideosource_OBJECTS) $(tcpvideosource_DEPENDENCIES) $(EXTRA_tcpvideosource_DEPENDENCIES) 
-	@rm -f tcpvideosource$(EXEEXT)
-	$(CXXLINK) $(tcpvideosource_OBJECTS) $(tcpvideosource_LDADD) $(LIBS)
+videosource$(EXEEXT): $(videosource_OBJECTS) $(videosource_DEPENDENCIES) $(EXTRA_videosource_DEPENDENCIES) 
+	@rm -f videosource$(EXEEXT)
+	$(CXXLINK) $(videosource_OBJECTS) $(videosource_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
-	-rm -f src/tcpvideosource.$(OBJEXT)
+	-rm -f src/videosource.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/tcpvideosource.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/videosource.Po@am__quote@
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\

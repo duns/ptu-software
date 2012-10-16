@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------------------------------------------------
-// tcpvideosource.cpp
+// videosource.cpp
 // -------------------------------------------------------------------------------------------------------------
 // Author(s)     : Kostas Tzevanidis
 // Contact       : ktzevanid@gmail.com
@@ -7,18 +7,18 @@
 // -------------------------------------------------------------------------------------------------------------
 
 /**
- * @defgroup tcp_source Gstreamer TCP video source
- * @ingroup tcp_video_streamer
- * @brief A Gstreamer source TCP video module.
+ * @defgroup video_source Gstreamer video source
+ * @ingroup video_streamer
+ * @brief A Gstreamer source video module.
  */
 
 /**
- * @file tcpvideosource.cpp
- * @ingroup tcp_source
- * @brief A Gstreamer source TCP video module.
+ * @file videosource.cpp
+ * @ingroup video_source
+ * @brief A Gstreamer source video module.
  *
  * The file contains the entry point of the video source. The application defines its configuration mechanism
- * with the use of the <em>boost program options</em> library. The video source streams video  over TCP with the 
+ * with the use of the <em>boost program options</em> library. The video source streams video over network with the 
  * aid of the Gstreamer Data Protocol (GDP).
  *
  * @sa <em>Gstreamer API documentation</em>, boost::program_options
@@ -32,11 +32,11 @@
 #include <boost/program_options.hpp>
 #include <boost/shared_ptr.hpp>
 
-#include "tcpvideosource.hpp"
+#include "videosource.hpp"
 
 /**
- * @ingroup tcp_source
- * @brief Gstreamer TCP video source entry point.
+ * @ingroup video_source
+ * @brief Gstreamer video source entry point.
  */
 int
 main( int argc, char* argv[] )
@@ -57,7 +57,7 @@ main( int argc, char* argv[] )
 	try
 	{
 		namespace app_opts = boost::program_options;
-		using namespace tcp_video_streamer;
+		using namespace video_streamer;
 
 		// configure, setup and parse program options
 
@@ -67,7 +67,7 @@ main( int argc, char* argv[] )
 			 << "Program Description" << std::endl
 			 << "-------------------" << std::endl << std::endl
 			 << "A Gstreamer h264 video transmitter (video source). This application " << std::endl
-			 << "sends through TCP/IP a video stream to a selected target.";
+			 << "sends through the network a video stream to a selected target.";
 
 		app_opts::options_description desc ( sstr.str() );
 		app_opts::options_description conf_desc( "" );
@@ -75,7 +75,7 @@ main( int argc, char* argv[] )
 		
 		desc.add_options()
 			( "help", "produce this message" )
-			( "config-path", app_opts::value<std::string>()->default_value( "/etc/tcpvideostream.conf/vsource.conf" )
+			( "config-path", app_opts::value<std::string>()->default_value( "/etc/videostream.conf/vsource.conf" )
 				, "Sets the configuration file path." )
 		;
 
@@ -91,7 +91,7 @@ main( int argc, char* argv[] )
 		conf_desc.add_options()
 			( "connection.remote-host", app_opts::value<std::string>(), "" )
 			( "connection.port", app_opts::value<int>(), "" )
-			( "connection.sync", app_opts::value<bool>(), "" )
+			( "connection.transfer-protocol", app_opts::value<std::string>(), "" )
 			( "videofilter.video-header", app_opts::value<std::string>(), "" )
 			( "videofilter.width", app_opts::value<int>(), "" )
 			( "videofilter.height", app_opts::value<int>(), "" )
@@ -119,8 +119,8 @@ main( int argc, char* argv[] )
 	
 		config_file.close();
 
-		if( opts_map["connection.remote-host"].empty()           || opts_map["connection.port"].empty()
-		 || opts_map["connection.sync"].empty()           || opts_map["videofilter.video-header"].empty() 
+		if( opts_map["connection.remote-host"].empty()       || opts_map["connection.port"].empty()
+		 || opts_map["connection.transfer-protocol"].empty() || opts_map["videofilter.video-header"].empty() 
 		 || opts_map["videofilter.width"].empty()         || opts_map["videofilter.height"].empty() 
 		 || opts_map["videofilter.framerate-num"].empty() || opts_map["videofilter.framerate-den"].empty() 
 		 || opts_map["v4l2source.always-copy"].empty()    || opts_map["dsp-encoder.codecName"].empty() 
@@ -150,15 +150,32 @@ main( int argc, char* argv[] )
 		// construct pipeline
 
 		pipeline << gst_element_factory_make( "v4l2src", "v4l2src" )
-			 << gst_element_factory_make( "videoscale", "videoscale" )
 			 << gst_element_factory_make( "ffmpegcolorspace", "ffmpegcs")
 			 << gst_element_factory_make( "TIVidenc1", "dspenc" )
-			 << gst_element_factory_make( "gdppay", "gdppay" )
-			 << gst_element_factory_make( "tcpclientsink", "tcpsink" );
+			 << gst_element_factory_make( "gdppay", "gdppay" );
+
+		if( !opts_map["connection.transfer-protocol"].as<std::string>().compare( "TCP" ) )
+		{
+			pipeline  << gst_element_factory_make( "tcpclientsink", "networksink" );
+		
+			g_object_set( G_OBJECT( gst_bin_get_by_name( pipeline.get(), "networksink" ) )
+				, "host", opts_map["connection.remote-host"].as<std::string>().c_str() 
+				, "port", opts_map["connection.port"].as<int>() 
+				, "sync", false
+				, NULL );
+		}
+		else if( !opts_map["connection.transfer-protocol"].as<std::string>().compare( "UDP" ) )
+		{
+			pipeline  << gst_element_factory_make( "udpsink", "networksink" );
+			
+			g_object_set( G_OBJECT( gst_bin_get_by_name( pipeline.get(), "networksink" ) )
+				, "host", opts_map["connection.remote-host"].as<std::string>().c_str()
+				, "port", opts_map["connection.port"].as<int>()
+				, NULL );
+		}
 
 		// set pipeline's elements properties
 		
-
 		g_object_set( G_OBJECT( gst_bin_get_by_name( pipeline.get(), "v4l2src" ) )
 			    , "always-copy", opts_map["v4l2source.always-copy"].as<bool>() //FALSE
 			    , NULL );
@@ -172,18 +189,12 @@ main( int argc, char* argv[] )
 			    , "rateControlPreset", opts_map["dsp-encoder.rateControlPreset"].as<int>() //2
 			    , NULL );
 
-		g_object_set( G_OBJECT( gst_bin_get_by_name( pipeline.get(), "tcpsink" ) )
-			, "host", opts_map["connection.remote-host"].as<std::string>().c_str() 
-			, "port", opts_map["connection.port"].as<int>() 
-			, "sync", opts_map["connection.sync"].as<bool>() //false
-			, NULL );
-
 		// intercept an existing link with a filter element
 
-		gst_element_unlink( gst_bin_get_by_name( pipeline.get(), "videoscale" )
+		gst_element_unlink( gst_bin_get_by_name( pipeline.get(), "v4l2src" )
 			, gst_bin_get_by_name( pipeline.get(), "ffmpegcs" ) );
 
-		insert_filter( gst_bin_get_by_name( pipeline.get(), "videoscale" )
+		insert_filter( gst_bin_get_by_name( pipeline.get(), "v4l2src" )
 			, gst_bin_get_by_name( pipeline.get(), "ffmpegcs" )
 			, opts_map );
 

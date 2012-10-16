@@ -15,14 +15,14 @@ AM_CPPFLAGS = $(DEPS_CFLAGS)
 
 ## Define an executable target "hello", which will be installed into the
 ## directory named by the predefined variable $(bindir).
-bin_PROGRAMS = gsttestsource 
+bin_PROGRAMS = videosource 
 
 ## Define the list of source files for the "hello" target. The file extension
 ## .cc is recognized by Automake, and causes it to produce rules which invoke
 ## the C++ compiler to produce an object file (.o) from each source file. The
 ## header files (.h) do not result in object files by themselves, but will be
 ## included in distribution archives of the project.
-gsttestsource_SOURCES = src/gst-test_source.cpp src/gst-test_source.hpp src/gst-test_common.hpp
+videosource_SOURCES = src/videosource.cpp src/videosource.hpp src/gst-common.hpp
 
-gsttestsource_LDADD = $(DEPS_LIBS)
+videosource_LDADD = $(DEPS_LIBS)
 
