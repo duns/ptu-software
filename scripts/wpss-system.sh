@@ -4,7 +4,7 @@ case "$1" in
 	start)
 		echo "Starting WPSS system services "
 		echo "Bringing up wireless interface"
-		systemctl restart NetworkManager.service
+#		systemctl restart NetworkManager.service
 #		ifup wlan0
 		echo "enabling gpio ${WPSS_SWITCH_3V} (3.3V enable)"
 		gpio_export ${WPSS_SWITCH_3V}

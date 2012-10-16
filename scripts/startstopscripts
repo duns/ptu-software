@@ -12,7 +12,7 @@ set -e
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DESC="system start and stop scripts"
 NAME="startstopscripts"
-DAEMON=/usr/local/sbin/wpss-system.sh
+DAEMON=/usr/sbin/wpss-system.sh
 #PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
 USER=root
