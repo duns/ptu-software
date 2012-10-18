@@ -7,6 +7,7 @@
 #define SERVER_PORT_SET_LINE "ServerPort: %d\n"
 #define DOSIMETER_ID_LINE "DosimeterID: %s\n"
 
+#define UNIT_NAME_PARAM_NAME "UnitName"
 #define SERVER_IP_PARAM_NAME "ServerIP"
 #define SERVER_PORT_PARAM_NAME "ServerPort"
 #define SERIAL_PORT_PARAM_NAME "SerialPortNum"

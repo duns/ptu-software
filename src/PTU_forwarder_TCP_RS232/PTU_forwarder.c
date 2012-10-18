@@ -93,7 +93,7 @@ time_t timestamps[NO_OF_REGISTERS];
 char * sensor_type_str[NO_OF_REGISTERS] = { "Temperature", "Humidity", "O2", "CO2", "HeartRate", "DoseAccum", "DoseRate", "BodyTemperature"};
 char * meas_units[NO_OF_REGISTERS] = { "C", "%", "%", "ppm", "bpm", "mSv", "mSv/h", "C"};
 const char * register_params[3] = { SAMPLE_RATE_PARAM_NAME, UP_LVL_PARAM_NAME, DOWN_LVL_PARAM_NAME};
-const char * program_params[6] = {SERVER_IP_PARAM_NAME, SERVER_PORT_PARAM_NAME, SERIAL_PORT_PARAM_NAME, SERIAL_BAUD_PARAM_NAME, DOS_ID_PARAM_NAME, CO2_EMF1_PARAM_NAME};
+const char * program_params[7] = {SERVER_IP_PARAM_NAME, SERVER_PORT_PARAM_NAME, SERIAL_PORT_PARAM_NAME, SERIAL_BAUD_PARAM_NAME, DOS_ID_PARAM_NAME, CO2_EMF1_PARAM_NAME, UNIT_NAME_PARAM_NAME};
 
 char * json_msg;
 int tcp_sock, fd_pipe;
@@ -831,19 +831,15 @@ int send_msg_to_tcp(char * msg, int len)
 int handle_msg_from_server()
 {
 	unsigned char in;
-	int ret = 1;
+	int ret = 0;
 
 	int i;
 
-	if (!new_json_msg)
+	tcp_pointer = 0;
+	tcp_buf_length = recv(tcp_sock, tcp_buf, MAX_SRV_MSG_SIZE, 0);
+	if (tcp_buf_length > 0)
 	{
-		if (tcp_pointer == tcp_buf_length)
-		{
-			tcp_buf_length = recv(tcp_sock, tcp_buf, MAX_SRV_MSG_SIZE, 0);
-			if (tcp_buf_length < 0) ret = 0;
-			tcp_pointer = 0;
-		}
-		while (!new_json_msg && tcp_pointer<tcp_buf_length)
+		while (tcp_pointer<tcp_buf_length)
 		{
 			in = tcp_buf[tcp_pointer++];
 			switch(poll_state)
@@ -851,6 +847,7 @@ int handle_msg_from_server()
 				case START:
 					if(in == 0x10)
 					{
+						json_pointer = 0;
 						poll_state = MESSAGE;
 						for (i=0; i<MAX_SRV_MSG_SIZE;i++)
 						{
@@ -861,6 +858,7 @@ int handle_msg_from_server()
 				case MESSAGE:
 					if (in == 0x10)
 					{
+						json_pointer = 0;
 						for (i=0; i<MAX_SRV_MSG_SIZE;i++)
 						{
 							json_pkg[i] = '\0';
@@ -871,12 +869,17 @@ int handle_msg_from_server()
 						poll_state = START;
 						new_json_msg = 1;
 						json_pkg[json_pointer] = '\0';
-						json_pointer = 0;
 						if (parse_json_msg() < 0) ret = -1;
+						else ret = 1;
 					}
 					else if (in != '\0')
 					{
 						json_pkg[json_pointer++] = in;
+						if (json_pointer >= MAX_SRV_MSG_SIZE)
+						{
+							poll_state = START;
+							ret = -1;
+						}
 					}
 					break;
 			}
@@ -943,34 +946,34 @@ int parse_json_msg()
 									strncpy(server_ip,svalue,15);
 								}
 								//Write server port
-								if( !strcmp(cursor->child->text, program_params[1]) )
+								else if( !strcmp(cursor->child->text, program_params[1]) )
 								{
 									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
 									ret = sscanf(cursor->child->text, "%f",&value);
-									if (ret != 1 ) continue;
-									server_port = value;
+									if (ret == 1 ) server_port = value;
 								}
 								//Write serial port name
-								if( !strcmp(cursor->child->text, program_params[2]) )
+								else if( !strcmp(cursor->child->text, program_params[2]) )
 								{
 									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
 									ret = sscanf(cursor->child->text, "%f",&value);
-									if (ret != 1 ) continue;
-									serial_port_num = value;
+									if (ret == 1 ) serial_port_num = value;
 								}
 								//Write serial port baudrate
-								if( !strcmp(cursor->child->text, program_params[3]) )
+								else if( !strcmp(cursor->child->text, program_params[3]) )
 								{
 									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
 									ret = sscanf(cursor->child->text, "%f",&value);
-									if (ret != 1 ) continue;
-									if (value == 9600 || value == 19200 || value == 38400  || value == 57600  || value == 115200)
+									if (ret == 1 )
 									{
-										ser_port_baud = value;
+										if (value == 9600 || value == 19200 || value == 38400  || value == 57600  || value == 115200)
+										{
+											ser_port_baud = value;
+										}
 									}
 								}
 								//Write dosimeter id
-								if( !strcmp(cursor->child->text, program_params[4]) )
+								else if( !strcmp(cursor->child->text, program_params[4]) )
 								{
 									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
 									svalue = cursor->child->text;
@@ -978,13 +981,22 @@ int parse_json_msg()
 									write_dos_id();
 								}
 								//Write CO2 EMF1 value for calibration of CO2 sensor
-								if( !strcmp(cursor->child->text, program_params[5]) )
+								else if( !strcmp(cursor->child->text, program_params[5]) )
 								{
 									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
 									ret = sscanf(cursor->child->text, "%f",&value);
-									if (ret != 1 ) continue;
-									CO2_emf1.val = value;
-									CO2_calibrate();
+									if (ret == 1 )
+									{
+										CO2_emf1.val = value;
+										CO2_calibrate();
+									}
+								}
+								//Write PTU unit name
+								else if (!strcmp(cursor->child->text, program_params[6]))
+								{
+									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
+									svalue = cursor->child->text;
+									strncpy(unit,svalue,20);
 								}
 							}
 						}
@@ -997,39 +1009,38 @@ int parse_json_msg()
 									break;
 								}
 							}
-							if(i == NO_OF_REGISTERS) continue;
-							cursor = json_find_first_label(entry, "Parameter");
-							if (cursor != NULL)
+							if(i != NO_OF_REGISTERS)
 							{
-								//Write sampling rate
-								if( !strcmp(cursor->child->text, register_params[0]) )
+								cursor = json_find_first_label(entry, "Parameter");
+								if (cursor != NULL)
 								{
-									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
-									ret = sscanf(cursor->child->text, "%f",&value);
-									if (ret != 1 ) continue;
-									reg_timers[i].period = value;
-								}
-								//Write up level threshold
-								else if( !strcmp(cursor->child->text, register_params[1]) )
-								{
-									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
-									ret = sscanf(cursor->child->text, "%f",&value);
-									if (ret != 1 ) continue;
-									reg_lvls[i].up_thres = value;
-								}
-								//Write down level threshold
-								else if( !strcmp(cursor->child->text, register_params[2]) )
-								{
-									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
-									ret = sscanf(cursor->child->text, "%f",&value);
-									if (ret != 1 ) continue;
-									reg_lvls[i].down_thres = value;
+									//Write sampling rate
+									if( !strcmp(cursor->child->text, register_params[0]) )
+									{
+										if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
+										ret = sscanf(cursor->child->text, "%f",&value);
+										if (ret == 1 ) reg_timers[i].period = value;
+									}
+									//Write up level threshold
+									else if( !strcmp(cursor->child->text, register_params[1]) )
+									{
+										if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
+										ret = sscanf(cursor->child->text, "%f",&value);
+										if (ret == 1 ) reg_lvls[i].up_thres = value;
+									}
+									//Write down level threshold
+									else if( !strcmp(cursor->child->text, register_params[2]) )
+									{
+										if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
+										ret = sscanf(cursor->child->text, "%f",&value);
+										if (ret == 1 ) reg_lvls[i].down_thres = value;
+									}
 								}
 							}
 						}
-						write_conf_settings();
 					}
 				}
+				write_conf_settings();
 			}
 		}
 		json_free_value(&root);
