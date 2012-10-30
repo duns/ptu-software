@@ -87,6 +87,8 @@ namespace video_source
 			create_add_element( root_bin, elements, "ffmpegcolorspace", "ffmpegcs" );
 			create_add_element( root_bin, elements, "TIVidenc1", "dspenc" );
 			create_add_element( root_bin, elements, "gdppay", "gdppay" );
+			create_add_element( root_bin, elements, "clockoverlay", "clockoverlay" );
+			create_add_element( root_bin, elements, "videorate", "videorate" );
 
 			if( !opts_map["connection.transfer-protocol"].as<std::string>().compare( std::string("TCP") ) )
 			{
@@ -121,10 +123,18 @@ namespace video_source
 				, "rateControlPreset", opts_map["dsp-encoder.rateControlPreset"].as<int>()
 				, NULL );
 
+			g_object_set( G_OBJECT( elements["clockoverlay"] )
+				, "halignment", opts_map["clockoverlay.halignment"].as<int>()
+				, "valignment", opts_map["clockoverlay.valignment"].as<int>()
+				, "shaded-background", opts_map["clockoverlay.shaded-background"].as<bool>()
+				, "time-format", opts_map["clockoverlay.time-format"].as<std::string>().c_str()
+				, "font-desc", opts_map["clockoverlay.font"].as<std::string>().c_str()
+				, NULL );
+
 			insert_filter( elements["v4l2src"], elements["ffmpegcs"], opts_map );
 
-			if( !gst_element_link_many( elements["ffmpegcs"], elements["dspenc"], elements["gdppay"]
-			   , elements["networksink"], NULL ) )
+			if( !gst_element_link_many( elements["ffmpegcs"], elements["videorate"], elements["clockoverlay"]
+			   , elements["dspenc"], elements["gdppay"], elements["networksink"], NULL ) )
 			{
 				LOG_CLOG( log_error ) << "Failed to link elements.";
 				BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );

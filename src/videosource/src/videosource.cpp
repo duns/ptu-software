@@ -12,8 +12,8 @@
  * @brief A Gstreamer source video module.
  *
  * The file contains the entry point of the video source. The application defines its configuration mechanism
- * with the use of the <em>boost program options</em> library. The video source streams video over network with the 
- * aid of the Gstreamer Data Protocol (GDP).
+ * with the use of the <em>boost program options</em> library. The video source streams video over network with
+ * the aid of the Gstreamer Data Protocol (GDP).
  *
  * @sa <em>Gstreamer API documentation</em>, boost::program_options
  */
@@ -28,16 +28,10 @@
 
 #include "videosource.hpp"
 
-/**
- * @ingroup video_source
- * @brief Default path of the video source configuration file.
- */
-#define CFG_SOURCE_PATH "/etc/videostream.conf/vsource.conf"
-
 using namespace video_streamer;
 using namespace video_source;
 
-auxiliary_libraries::log_level global_log_level = log_info;
+auxiliary_libraries::log_level global_log_level = log_debug_2;
 
 /**
  * @ingroup video_source
@@ -71,8 +65,7 @@ main( int argc, char* argv[] )
 		
 		desc.add_options()
 			( "help", "produce this message" )
-			( "config-path", app_opts::value<std::string>()->default_value( CFG_SOURCE_PATH )
-				, "Sets the configuration file path." )
+			( "config-path", app_opts::value<std::string>(), "Sets the configuration file path." )
 		;
 
 		app_opts::store( app_opts::parse_command_line( argc, argv, desc ), opts_map );
@@ -84,23 +77,35 @@ main( int argc, char* argv[] )
 			return EXIT_SUCCESS;
 		}
 
+		if( opts_map["config-path"].empty() )
+		{
+			LOG_CLOG( log_error ) << "You must supply a path for the configuration file.";
+			return EXIT_FAILURE;
+		}
+
+
 		conf_desc.add_options()
-			( "connection.remote-host", app_opts::value<std::string>(), "" )
-			( "connection.port", app_opts::value<int>(), "" )
-			( "connection.transfer-protocol", app_opts::value<std::string>(), "" )
-			( "videofilter.video-header", app_opts::value<std::string>(), "" )
-			( "videofilter.width", app_opts::value<int>(), "" )
-			( "videofilter.height", app_opts::value<int>(), "" )
-			( "videofilter.framerate-num", app_opts::value<int>(), "" )
-			( "videofilter.framerate-den", app_opts::value<int>(), "" )
-			( "v4l2source.always-copy", app_opts::value<bool>(), "" )
-			( "dsp-encoder.codecName", app_opts::value<std::string>(), "" )
-			( "dsp-encoder.engineName", app_opts::value<std::string>(), "" )
-			( "dsp-encoder.iColorSpace", app_opts::value<std::string>(), "" )
-			( "dsp-encoder.bitRate", app_opts::value<int>(), "" )
-			( "dsp-encoder.encodingPreset", app_opts::value<int>(), "" )
-			( "dsp-encoder.rateControlPreset", app_opts::value<int>(), "" )	
-			( "execution.messages-detail", app_opts::value<int>(), "" )
+			( "connection.remote-host"        , app_opts::value<std::string>(), "" )
+			( "connection.port"               , app_opts::value<int>()        , "" )
+			( "connection.transfer-protocol"  , app_opts::value<std::string>(), "" )
+			( "videofilter.video-header"      , app_opts::value<std::string>(), "" )
+			( "videofilter.width"             , app_opts::value<int>()        , "" )
+			( "videofilter.height"            , app_opts::value<int>()        , "" )
+			( "videofilter.framerate-num"     , app_opts::value<int>()        , "" )
+			( "videofilter.framerate-den"     , app_opts::value<int>()        , "" )
+			( "v4l2source.always-copy"        , app_opts::value<bool>()       , "" )
+			( "clockoverlay.halignment"       , app_opts::value<int>()        , "" )
+			( "clockoverlay.valignment"       , app_opts::value<int>()        , "" )
+			( "clockoverlay.shaded-background", app_opts::value<bool>()       , "" )
+			( "clockoverlay.time-format"      , app_opts::value<std::string>(), "" )
+			( "clockoverlay.font"             , app_opts::value<std::string>(), "" )
+			( "dsp-encoder.codecName"         , app_opts::value<std::string>(), "" )
+			( "dsp-encoder.engineName"        , app_opts::value<std::string>(), "" )
+			( "dsp-encoder.iColorSpace"       , app_opts::value<std::string>(), "" )
+			( "dsp-encoder.bitRate"           , app_opts::value<int>()        , "" )
+			( "dsp-encoder.encodingPreset"    , app_opts::value<int>()        , "" )
+			( "dsp-encoder.rateControlPreset" , app_opts::value<int>()        , "" )
+			( "execution.messages-detail"     , app_opts::value<int>()        , "" )
 		;
 
 		std::ifstream config_file( opts_map["config-path"].as<std::string>().c_str() );
