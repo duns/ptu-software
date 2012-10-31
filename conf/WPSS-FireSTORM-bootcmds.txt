@@ -18,7 +18,7 @@ setenv nandargs 'setenv bootargs console=${console} ${optargs} mpurate=${mpurate
 setenv nandboot 'echo Booting from nand ...; run nandargs; nand read ${loadaddr} 280000 400000; bootm ${loadaddr}'
 setenv nandroot 'ubi0:rootfs ubi.mtd=4'
 setenv nandrootfstype 'ubifs'
-setenv optargs 'mem=93M@0x80000000 mem=128M@0x88000000'
+setenv optargs 'mem=99M@0x80000000 mem=128M@0x88000000'
 setenv stderr 'serial'
 setenv stdin 'serial'
 setenv stdout 'serial'

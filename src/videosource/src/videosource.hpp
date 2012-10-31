@@ -1,28 +1,28 @@
 // -------------------------------------------------------------------------------------------------------------
-// gst-test_source.hpp
+// videosource.hpp
 // -------------------------------------------------------------------------------------------------------------
 // Author(s)     : Kostas Tzevanidis
 // Contact       : ktzevanid@gmail.com 
-// Last revision : September 2012
+// Last revision : October 2012
 // -------------------------------------------------------------------------------------------------------------
 
 /**
- * @file gst-test_source.hpp
- * @ingroup nc_tcp_source
- * @brief Declarations and definitions for TCP video streaming source prototype.
+ * @file videosource.hpp
+ * @ingroup video_source
+ * @brief Declarations and definitions for ptu-side video streaming module.
  */
 
-#ifndef GST_TEST_SOURCE_HPP
-#define GST_TEST_SOURCE_HPP
+#ifndef VIDEOSOURCE_HPP
+#define VIDEOSOURCE_HPP
 
-#include "gst-test_common.hpp"
+#include "gst-common.hpp"
 
-namespace nc_tcp_video_streamer_prot
+namespace video_streamer
 {
 	// pipeline bus event handler
 
 	/**
- 	 * @ingroup nc_tcp_source
+ 	 * @ingroup video_source
 	 * @brief Gstreamer bus message callback
 	 * This function is registered during pipeline initialization as the pipeline's bus message handler.
 	 * The handler is being invoked every time the pipeline publishes a message on the pipeline bus.
@@ -76,4 +76,4 @@ namespace nc_tcp_video_streamer_prot
 	}
 }
 
-#endif /* GST_TEST_SOURCE_HPP */
+#endif /* VIDEOSOURCE_HPP */

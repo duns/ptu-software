@@ -13,7 +13,7 @@ set -e
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DESC="commandserver daemon"
 NAME="commandserver"
-SCRIPT=/usr/local/sbin/$NAME
+SCRIPT=/usr/sbin/$NAME
 DAEMON=/bin/bash
 DAEMON_OPTS="$SCRIPT /etc/commandserver.conf"
 PIDFILE=/var/run/$NAME.pid

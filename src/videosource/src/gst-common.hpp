@@ -1,47 +1,48 @@
 // -------------------------------------------------------------------------------------------------------------
-// gst-test_common.hpp
+// gst-common.hpp
 // -------------------------------------------------------------------------------------------------------------
 // Author(s)     : Kostas Tzevanidis
 // Contact       : ktzevanid@gmail.com
-// Last revision : September 2012
+// Last revision : October 2012
 // -------------------------------------------------------------------------------------------------------------
 
 /**
- * @defgroup nc_tcp_video_streamer_prot TCP-based Gstreamer-powered video streaming prototypes
- * @ingroup prototypes
- * @brief Video streaming over TCP.
+ * @defgroup video_streamer Gstreamer-powered video streamer
+ * @ingroup ptu-modules
+ * @brief Video streaming over network.
  */ 
 
 /**
- * @file gst-test_common.hpp
- * @ingroup nc_tcp_video_streamer_prot
- * @brief Common type declarations and global function definitions for Gstreamer TCP video streaming prototypes.
+ * @file gst-common.hpp
+ * @ingroup video_streamer
+ * @brief Common type declarations and global function definitions for Gstreamer video streamer.
  */
 
 /**
- * @namespace nc_tcp_video_streamer_prot
- * @ingroup nc_tcp_video_streamer_prot
- * @brief Video streaming prototypes using Gstreamer.
+ * @namespace video_streamer
+ * @ingroup video_streamer
+ * @brief Video streaming using Gstreamer.
  */
 
-#ifndef GST_TEST_COMMON_HPP
-#define GST_TEST_COMMON_HPP
+#ifndef GST_COMMON_HPP
+#define GST_COMMON_HPP
 
 #include <gst/gst.h>
 #include <boost/exception/all.hpp>
+#include <boost/program_options.hpp>
  
-namespace nc_tcp_video_streamer_prot
+namespace video_streamer
 {
 	// managed Gstreamer resources
 
 	/**
-         * @ingroup nc_tcp_video_streamer_prot
+         * @ingroup video_streamer
          * @brief Managed dynamic Gstreamer bin resource.
          */
 	typedef boost::shared_ptr<GstBin> gstbin_pt;
 
 	/**
-         * @ingroup nc_tcp_video_streamer_prot
+         * @ingroup video_streamer
          * @brief Managed dynamic Gstreamer bus resource.
          */
 	typedef boost::shared_ptr<GstBus> gstbus_pt;
@@ -49,14 +50,14 @@ namespace nc_tcp_video_streamer_prot
 	// boost::exception error info types
 
 	/**
-         * @ingroup nc_tcp_video_streamer_prot
+         * @ingroup video_streamer
          * @brief Message type for legacy API errors.
          * This type is utilized for information propagation along with legacy-api-triggered C++ exceptions. 
          */
 	typedef boost::error_info<struct tag_my_info, std::string> api_info;
 
 	/**
-         * @ingroup nc_tcp_video_streamer_prot
+         * @ingroup video_streamer
          * @brief Message type for Gstreamer Bus errors.
          * This type is utilized for information propagation along with C++ exceptions originating
          * from Gstreamer bus message handler.
@@ -66,7 +67,7 @@ namespace nc_tcp_video_streamer_prot
 	// custom destructor for managed Gstreamer resources
 
 	/**
-         * @ingroup nc_tcp_video_streamer_prot
+         * @ingroup video_streamer
          * @brief Custom deleter for smart pointers referencing Gstreamer resources.
 	 * A generic custom deleter functor for Gstreamer resources.
          *
@@ -89,21 +90,19 @@ namespace nc_tcp_video_streamer_prot
 	// custom exception types
 
 	/**
-	 * @ingroup nc_tcp_video_streamer_prot
+	 * @ingroup video_streamer
 	 * @brief Exception type for Gstreamer API errors.
 	 */
 	struct api_error: virtual boost::exception, virtual std::exception { };
 
 	/**
-	 * @ingroup nc_tcp_video_streamer_prot
+	 * @ingroup video_streamer
 	 * @brief Exception type for Gstreamer bus errors.
 	 */
 	struct bus_error: virtual boost::exception, virtual std::exception { };
 
-	// << overload for easy pipeline construction
-
 	/**
-	 * @ingroup nc_tcp_video_streamer_prot
+	 * @ingroup video_streamer
 	 * @brief Global streaming operator overload.
 	 * Eases the sequential Gstreamer flow construction from simple Gstreamer elements.
 	 *
@@ -111,7 +110,7 @@ namespace nc_tcp_video_streamer_prot
 	 * @param elem Gstreamer element to be added in the container
 	 * @returns reference to the Gstreamer container (in order to enable chaining)
 	 *
-	 * @throws nc_tcp_video_streamer_prot::api_error in case the element linking failed
+	 * @throws video_streamer::api_error in case the element linking failed
 	 */
 	inline gstbin_pt&
 	operator<<( gstbin_pt& container, GstElement* elem )
@@ -138,28 +137,33 @@ namespace nc_tcp_video_streamer_prot
 	// filter interception during element linking
 
 	/**
-	 * @ingroup nc_tcp_video_streamer_prot
+	 * @ingroup video_streamer
 	 * @brief Inserts filter between two consecutive elements
 	 * Given two Gstreamer elements that are indented to be linked against each other, this function inserts
 	 * a hard-coded filter element in between and performs the linking.
 	 *
 	 * @param elem_1 assuming a left-to-right flow this is the left-most element
 	 * @param elem_2 assuming a left-to-right flow this is the right-most element
-	 * 
-	 * @throws nc_tcp_video_streamer_prot::api_error in case the element linking failed
+	 * @param opts_map set of options for setting the filter properties
+	 *
+	 * @throws video_streamer::api_error in case the element linking failed
  	 */
 	inline void
-	insert_filter( GstElement* elem_1, GstElement* elem_2 )
+	insert_filter( GstElement* elem_1, GstElement* elem_2
+		, const boost::program_options::variables_map& opts_map )
 	{
 		gboolean link_flag = false;
 		GstCaps* caps;
 
-		caps = gst_caps_new_simple( "video/x-raw-yuv"
-			, "width", G_TYPE_INT, 640
-			, "height", G_TYPE_INT, 480
-			, "framerate", GST_TYPE_FRACTION, 30, 1
-			, "format", GST_TYPE_FOURCC, GST_MAKE_FOURCC('I','4','2','0')
-			, "interlaced", G_TYPE_BOOLEAN, false
+		caps = gst_caps_new_simple( 
+			opts_map["videofilter.video-header"].as<std::string>().c_str() 
+			, "width"     , G_TYPE_INT
+			, opts_map["videofilter.width"].as<int>() 
+			, "height"    , G_TYPE_INT
+			, opts_map["videofilter.height"].as<int>() 
+			, "framerate" , GST_TYPE_FRACTION
+			, opts_map["videofilter.framerate-num"].as<int>()
+		        , opts_map["videofilter.framerate-den"].as<int>()
 			, NULL );
 
 		link_flag = gst_element_link_filtered( elem_1, elem_2, caps );
@@ -171,6 +175,6 @@ namespace nc_tcp_video_streamer_prot
 	}
 }
 
-#endif // GST_TEST_COMMON_HPP
+#endif // GST_COMMON_HPP
 
 
