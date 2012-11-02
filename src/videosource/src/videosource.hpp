@@ -7,6 +7,12 @@
 // -------------------------------------------------------------------------------------------------------------
 
 /**
+ * @defgroup video_source Gstreamer video source
+ * @ingroup ptu-modules
+ * @brief Gstreamer video source module.
+ */
+
+/**
  * @file videosource.hpp
  * @ingroup video_source
  * @brief Declarations and definitions for ptu-side video streaming module.
@@ -15,11 +21,14 @@
 #ifndef VIDEOSOURCE_HPP
 #define VIDEOSOURCE_HPP
 
-#include "gst-common.hpp"
+#include "log.hpp"
+#include "videostreamer_common.hpp"
+#include "videosource_pipeline.hpp"
 
-namespace video_streamer
+namespace video_source
 {
-	// pipeline bus event handler
+	using namespace auxiliary_libraries;
+	using namespace video_streamer;
 
 	/**
  	 * @ingroup video_source
@@ -56,20 +65,19 @@ namespace video_streamer
 			g_error_free( err );
 			g_free( err_str );
 
-			g_main_loop_quit( loop );
+			LOG_CLOG( log_error ) << "'" << msg->src->name << "' threw a: " << GST_MESSAGE_TYPE_NAME( msg );
 			BOOST_THROW_EXCEPTION( bus_error() << bus_info( err_msg ) );
-
 		}
-			break;
-
+		break;
 		case GST_MESSAGE_EOS:
+		{
+			LOG_CLOG( log_info ) << "Stream finished normally.";
 			g_main_loop_quit( loop );
-			std::cerr << "Stream finished normally." << std::endl;
-			break;
-
+		}
+		break;
 		default:
-			std::cerr << "Unhandled message send by: " << msg->src->name << std::endl;
-			break;
+			LOG_CLOG( log_debug_0 ) << "'" << msg->src->name << "' threw a: " << GST_MESSAGE_TYPE_NAME( msg );
+		break;
 		}
 
 		return true;

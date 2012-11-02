@@ -1,6 +1,6 @@
 [connection]
 transfer-protocol=TCP
-remote-host=192.168.1.3
+remote-host=10.8.1.6
 port=5000
 [videofilter]
 video-header=video/x-raw-yuv
@@ -10,6 +10,12 @@ framerate-num=15
 framerate-den=1
 [v4l2source]
 always-copy=false
+[clockoverlay]
+halignment=2
+valignment=1
+shaded-background=true
+time-format=%H:%M:%S
+font=xxx xxx 13 
 [dsp-encoder]
 codecName=h264enc
 engineName=codecServer
@@ -17,3 +23,5 @@ iColorSpace=UYVY
 bitRate=2000000
 encodingPreset=2
 rateControlPreset=2
+[execution]
+messages-detail=1

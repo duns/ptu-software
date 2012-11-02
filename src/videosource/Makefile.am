@@ -11,7 +11,7 @@ CFLAGS = -I/usr/include/boost
 LIBS = -lboost_program_options \
        -lboost_thread
 
-AM_CPPFLAGS = $(DEPS_CFLAGS)
+AM_CPPFLAGS = -std=c++0x $(DEPS_CFLAGS)
 
 ## Define an executable target "hello", which will be installed into the
 ## directory named by the predefined variable $(bindir).
@@ -22,7 +22,8 @@ bin_PROGRAMS = videosource
 ## the C++ compiler to produce an object file (.o) from each source file. The
 ## header files (.h) do not result in object files by themselves, but will be
 ## included in distribution archives of the project.
-videosource_SOURCES = src/videosource.cpp src/videosource.hpp src/gst-common.hpp
+videosource_SOURCES = src/videosource.cpp src/videosource.hpp src/videostreamer_common.hpp \
+                      src/videosource_pipeline.hpp src/log.hpp 
 
 videosource_LDADD = $(DEPS_LIBS)
 

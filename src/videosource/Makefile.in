@@ -180,8 +180,10 @@ top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = foreign subdir-objects
 ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS} 
 CFLAGS = -I/usr/include/boost
-AM_CPPFLAGS = $(DEPS_CFLAGS)
-videosource_SOURCES = src/videosource.cpp src/videosource.hpp src/gst-common.hpp
+AM_CPPFLAGS = -std=c++0x $(DEPS_CFLAGS)
+videosource_SOURCES = src/videosource.cpp src/videosource.hpp src/videostreamer_common.hpp \
+                      src/videosource_pipeline.hpp src/log.hpp 
+
 videosource_LDADD = $(DEPS_LIBS)
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am

@@ -1,16 +1,20 @@
 #define CONF_FILE_NAME "/etc/ptu_forwarder.conf"
+//#define CONF_FILE_NAME "config.txt"
 #define SERIAL_PORT_NUM "SerialPortNum: %d\n"
 #define SERIAL_PORT_BAUD "SerialPortBaud: %d\n"
 #define UNIT_NAME_SET_LINE "UnitName: %s\n"
 #define SERVER_IP_SET_LINE "ServerIP: %s\n"
 #define SERVER_PORT_SET_LINE "ServerPort: %d\n"
 #define DOSIMETER_ID_LINE "DosimeterID: %s\n"
+#define MAC_ADDRESS_LINE "MacAddress: %s\n"
 
+#define UNIT_NAME_PARAM_NAME "UnitName"
 #define SERVER_IP_PARAM_NAME "ServerIP"
 #define SERVER_PORT_PARAM_NAME "ServerPort"
 #define SERIAL_PORT_PARAM_NAME "SerialPortNum"
 #define SERIAL_BAUD_PARAM_NAME "SerialPortBaud"
 #define DOS_ID_PARAM_NAME "DosimeterID"
+#define CO2_EMF1_PARAM_NAME "CO2_EMF1"
 
 #define SAMPLE_RATE_PARAM_NAME "SamplingRate"
 #define UP_LVL_PARAM_NAME "UpLevel"
@@ -30,7 +34,7 @@
 
 #define SAMPLE_MET "OneShoot"
 
-#define PIPE	"/home/sekat/pipe"
+#define PIPE	"/home/root/pipe"
 #define MAX_BUF_SIZE	255
 
 enum sensor_type { TMP, HUM, O2, CO2, HEART_RATE, DOSE_ACCUM, DOSE_RATE, BODY_TEMP};
@@ -59,6 +63,26 @@ typedef struct
   float down_thres;
 } reg_level_info;
 
+typedef struct
+{
+	char command_id;
+	uint8_t pointer;
+	uint16_t register_id;
+	uint16_t register_num;
+	uint16_t length;
+	char data[100];
+	uint16_t crc;
+} modbus_t;
+
+enum modbus_state_t {COMMAND, REGISTER, REG_NUM, LENGTH, DATA, CRC};
+enum poll_data_link {START, MESSAGE};
+
+typedef struct
+{
+	uint16_t register_id;
+	ser_float value;
+}modbus_reg_t;
+
 void init();
 int init_serial();
 void init_tcp_conn();
@@ -71,10 +95,15 @@ void set_sock_non_block(int socket);
 int read_meas_register(uint8_t reg, uint8_t num);
 uint8_t read_registers(uint8_t regs_bitmap);
 void write_dos_id (void);
+void CO2_calibrate(void);
 int handle_msg_from_server();
+int parse_json_msg();
 int meas_to_JSON(uint8_t sensors_bitmap);
 int alert_to_JSON ();
 int ack_to_JSON (char * frame_ack);
+int config_to_JSON (char * file_path, char * file_content);
 int send_msg_to_tcp(char * msg, int len);
 void timer_handler(void);
+void handle_modbus_pkg(void);
+int get_local_hwaddr(const char *ifname, unsigned char *mac);
 uint16_t CheckCRC(uint8_t *pbuffer, uint8_t length);
