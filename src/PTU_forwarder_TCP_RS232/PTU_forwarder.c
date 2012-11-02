@@ -34,6 +34,7 @@ void timer_handler(void);
 
 int ser_port_baud, serial_port_num;
 char new_modbus_pkg;
+char *mac_address;
 char server_ip[15];
 char dos_id[6];
 ser_float CO2_emf1;
@@ -107,8 +108,11 @@ int main (void)
 	int retval, max_socket;
 	int times = 1, write_efforts = 0;
 	uint8_t regs_bmp;
+	int i;
 
-    init();
+	mac_address = malloc(13);
+	init();
+    write_conf_settings();
 
 	while(1)
 	{
@@ -377,6 +381,7 @@ void reset_expired_timers()
 int read_conf_settings()
 {
 	FILE * conf_file;
+	unsigned char mac[IFHWADDRLEN];
 	int temp_port, i, cur_reg;
 	char reg_type[20];
 
@@ -389,10 +394,16 @@ int read_conf_settings()
 			fscanf(conf_file, SERVER_PORT_SET_LINE, &temp_port) != 1 ||
             fscanf(conf_file, SERIAL_PORT_NUM, &serial_port_num) != 1 ||
             fscanf(conf_file, SERIAL_PORT_BAUD, &ser_port_baud) != 1 ||
-            fscanf(conf_file, DOSIMETER_ID_LINE, dos_id) != 1)
+            fscanf(conf_file, DOSIMETER_ID_LINE, dos_id) != 1 ||
+            fscanf(conf_file, MAC_ADDRESS_LINE, mac_address) != 1)
 	{
 		return -2;
 	}
+
+	get_local_hwaddr("wlan0", mac);
+	for (i=0;i<IFHWADDRLEN;i++)
+		snprintf(mac_address+i*2, 13-i*2, "%02x", (unsigned char) mac[i]);
+
 	#ifdef DEBUG
 	printf(UNIT_NAME_SET_LINE, unit);
 	printf(DOSIMETER_ID_LINE, dos_id);
@@ -461,7 +472,8 @@ int write_conf_settings()
 			(sum +=fprintf(conf_file, SERVER_PORT_SET_LINE, server_port)) <= 0 ||
             (sum +=fprintf(conf_file, SERIAL_PORT_NUM, serial_port_num)) <=0 ||
             (sum +=fprintf(conf_file, SERIAL_PORT_BAUD, ser_port_baud)) <=0 ||
-			(sum +=fprintf(conf_file, DOSIMETER_ID_LINE, dos_id)) <= 0)
+			(sum +=fprintf(conf_file, DOSIMETER_ID_LINE, dos_id)) <= 0 ||
+			(sum +=fprintf(conf_file, MAC_ADDRESS_LINE, mac_address)) <= 0)
 	{     
 		return -2;
 	}
@@ -633,7 +645,7 @@ int meas_to_JSON(uint8_t sensors_bitmap)
 		json_insert_pair_into_object(array_elem, "Sensor", json_new_string(sensor));
 		timeinfo = localtime ( &timestamps[cur_reg] );
 		sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d", 
-		timeinfo->tm_mday, timeinfo->tm_mon, (timeinfo->tm_year+1900), 
+		timeinfo->tm_mday, (timeinfo->tm_mon+1), (timeinfo->tm_year+1900),
 		timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 		json_insert_pair_into_object(array_elem, "Time", json_new_string(txt_buf));
 		json_insert_pair_into_object(array_elem, "Method", json_new_string(SAMPLE_MET));
@@ -705,7 +717,7 @@ int meas_to_JSON(uint8_t sensors_bitmap)
 		json_insert_pair_into_object(array_elem, "Sensor", json_new_string(sensor));
 		json_insert_pair_into_object(array_elem, "EventType", json_new_string(lvl_str));
 		timeinfo = localtime ( &timestamps[cur_reg] );
-		sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d", timeinfo->tm_mday, timeinfo->tm_mon, (timeinfo->tm_year+1900), timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+		sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d", timeinfo->tm_mday, (timeinfo->tm_mon+1), (timeinfo->tm_year+1900), timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 		json_insert_pair_into_object(array_elem, "Time", json_new_string(txt_buf));
 		sprintf(txt_buf, "%g", meas[cur_reg].val);
 		json_insert_pair_into_object(array_elem, "Value", json_new_string(txt_buf));
@@ -745,7 +757,7 @@ int alert_to_JSON (char * event, char * sensor)
 	json_insert_pair_into_object(array_elem, "EventType", json_new_string(event));
 	timestamp = time(NULL);
 	timeinfo = localtime ( &timestamp );
-	sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d", timeinfo->tm_mday, timeinfo->tm_mon, (timeinfo->tm_year+1900), timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+	sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d", timeinfo->tm_mday, (timeinfo->tm_mon+1), (timeinfo->tm_year+1900), timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 	json_insert_pair_into_object(array_elem, "Time", json_new_string(txt_buf));
 	json_insert_child(array, array_elem);
 
@@ -786,6 +798,33 @@ int ack_to_JSON (char * frame_ack)
 	return (strlen(json_msg) +1);
 }
 
+int config_to_JSON (char * file_path, char * file_content)
+{
+	json_t *entry, *array_elem, *array;
+	char  txt_buf[20], *text;
+
+	entry = json_new_object();
+	array = json_new_array();
+
+	json_insert_pair_into_object(entry, "Sender", json_new_string(unit));
+	sprintf(txt_buf,"%d", frame_id);
+	json_insert_pair_into_object(entry, "FrameID", json_new_string(txt_buf));
+
+	array_elem = json_new_object();
+	json_insert_pair_into_object(array_elem, "Type", json_new_string("ReadFileResponse"));
+	json_insert_pair_into_object(array_elem, "FilePath", json_new_string(file_path));
+	json_insert_pair_into_object(array_elem, "FileContent", json_new_string(file_content));
+	json_insert_child(array, array_elem);
+
+	json_insert_pair_into_object(entry, "Messages", array);
+	json_tree_to_string(entry, &text);
+	json_msg = (char *)malloc((strlen(text) +1));
+	bcopy(text, json_msg, (strlen(text) +1));
+	// clean up
+	json_free_value(&entry);
+	if (text != NULL) free(text);
+	return (strlen(json_msg) +1);
+}
 
 /*
  * Sends the msg to the server over tcp.
@@ -826,7 +865,11 @@ int send_msg_to_tcp(char * msg, int len)
 }
 
 /*
- * Receive and handle message containing orders from server.
+ * Receive and handle message containing orders from server. Returns:
+ * -1: in case an error occurs during parsing the message or the message
+ * size exceeds the defined max limit
+ * 0: in case there is an error with the start/end delimiters of the received message
+ * 1: in case the message was received and parsed successfully
  */
 int handle_msg_from_server()
 {
@@ -888,10 +931,21 @@ int handle_msg_from_server()
 	return ret;
 }
 
+/*
+ * Parses the JSON message from the server and implements the requested actions (eg. write a
+ * parameter, read config file etc.). Returns:
+ * -1: in case an error occurs during parsing the message
+ * 0: in case there is not a new JSON message
+ * 1: in case the new JSON message was parsed successfully
+ */
 int parse_json_msg()
 {
+	FILE * conf_file;
+	struct stat file_st;
+	char * file_content;
 	json_t * entry = NULL, * root = NULL, * cursor = NULL;
 	int ret, i, jason_len;
+	int fd_read, fd_write;
 	float value;
 	char * svalue;
 	
@@ -909,13 +963,24 @@ int parse_json_msg()
 				entry = json_find_first_label(root, "FrameID");
 				if (entry != NULL)
 				{
+					#ifdef TCP_CONN
 					jason_len = ack_to_JSON(entry->child->text);
 					frame_id++;
 					if ( !send_msg_to_tcp(json_msg, jason_len) )
 					{
 						init_tcp_conn();
+						#ifdef DEBUG
+						printf("Debug: Try to initialize TCP.\n");
+						#endif
+					}
+					else
+					{
+						#ifdef DEBUG
+						printf("Debug: JSON acknowledge transmitted, %s, frame_id:%d\n",unit,frame_id);
+						#endif
 					}
 					if (json_msg != NULL) free(json_msg);
+					#endif
 				}
 			}
 		}
@@ -1036,6 +1101,74 @@ int parse_json_msg()
 										if (ret == 1 ) reg_lvls[i].down_thres = value;
 									}
 								}
+							}
+						}
+					}
+					else if (!strcmp(cursor->child->text, "ReadFile"))
+					{
+						cursor = json_find_first_label(entry, "FilePath");
+						if (cursor != NULL)
+						{
+							//Open configuration file for reading
+							if ( (conf_file = fopen(cursor->child->text, "r")) != NULL) // Check if successfully opened
+							{
+								fd_read = fileno(conf_file);
+							    //Get file size in bytes
+							    if (fstat(fd_read, &file_st) == 0) //Check if file size is returned successfully
+							    {
+							    	file_content = malloc(file_st.st_size + 1);   // 1 byte more for /0
+									if (file_content != NULL)
+									{
+									    // Read entire file content
+									    if (read(fd_read, file_content, file_st.st_size) > 0)
+									    {
+									        file_content[file_st.st_size] = '\0';
+									        //Create JSON package with config file content
+											#ifdef TCP_CONN
+											jason_len = config_to_JSON(cursor->child->text, file_content);
+											frame_id++;
+											if ( !send_msg_to_tcp(json_msg, jason_len) )
+											{
+												init_tcp_conn();
+												#ifdef DEBUG
+												printf("Debug: Try to initialize TCP.\n");
+												#endif
+											}
+											else
+											{
+												#ifdef DEBUG
+												printf("Debug: JSON config file transmitted, %s, frame_id:%d\n",unit,frame_id);
+												#endif
+											}
+											if (json_msg != NULL) free(json_msg);
+											#endif
+									    }
+								        free(file_content);
+									}
+							    }
+							    fclose(conf_file);
+							}
+						}
+					}
+					else if (!strcmp(cursor->child->text, "WriteFile"))
+					{
+						cursor = json_find_first_label(entry, "FilePath");
+						if (cursor != NULL)
+						{
+							//Open configuration file for writing
+							if ( (conf_file = fopen(cursor->child->text, "w+")) != NULL) // Check if successfully opened
+							{
+								cursor = json_find_first_label(entry, "FileContent");
+								if (cursor != NULL)
+								{
+									fd_write = fileno(conf_file);
+									//Write config file
+									file_content = malloc(strlen(cursor->child->text));
+									file_content = cursor->child->text;
+									write(fd_write, file_content, strlen(cursor->child->text));
+									if (file_content != NULL) free(file_content);
+								}
+								fclose(conf_file);
 							}
 						}
 					}
@@ -1341,6 +1474,25 @@ void handle_modbus_pkg()
 		}
 		new_modbus_pkg = 0;
 	}
+}
+
+int get_local_hwaddr(const char *ifname, unsigned char *mac)
+{
+	struct ifreq ifr;
+	int fd, ret;
+
+	strcpy(ifr.ifr_name, ifname);
+	fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+	if (fd<0)
+		ret = fd;
+	else
+	{
+		ret = ioctl(fd, SIOCGIFHWADDR, &ifr);
+		if (ret >= 0)
+			memcpy(mac, ifr.ifr_hwaddr.sa_data, IFHWADDRLEN);
+	}
+
+	return ret;
 }
 
 /**************************************************************************

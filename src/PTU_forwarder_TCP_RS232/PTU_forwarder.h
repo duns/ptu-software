@@ -6,6 +6,7 @@
 #define SERVER_IP_SET_LINE "ServerIP: %s\n"
 #define SERVER_PORT_SET_LINE "ServerPort: %d\n"
 #define DOSIMETER_ID_LINE "DosimeterID: %s\n"
+#define MAC_ADDRESS_LINE "MacAddress: %s\n"
 
 #define UNIT_NAME_PARAM_NAME "UnitName"
 #define SERVER_IP_PARAM_NAME "ServerIP"
@@ -100,7 +101,9 @@ int parse_json_msg();
 int meas_to_JSON(uint8_t sensors_bitmap);
 int alert_to_JSON ();
 int ack_to_JSON (char * frame_ack);
+int config_to_JSON (char * file_path, char * file_content);
 int send_msg_to_tcp(char * msg, int len);
 void timer_handler(void);
 void handle_modbus_pkg(void);
+int get_local_hwaddr(const char *ifname, unsigned char *mac);
 uint16_t CheckCRC(uint8_t *pbuffer, uint8_t length);
