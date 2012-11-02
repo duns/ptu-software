@@ -112,6 +112,7 @@ namespace video_source
 
 			g_object_set( G_OBJECT( elements["v4l2src"] )
 				, "always-copy", opts_map["v4l2source.always-copy"].as<bool>()
+				, "device", opts_map["v4l2source.device"].as<std::string>().c_str()
 				, NULL );
 
 			g_object_set( G_OBJECT( elements["dspenc"] )

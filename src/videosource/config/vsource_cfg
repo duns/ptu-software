@@ -10,6 +10,7 @@ framerate-num=15
 framerate-den=1
 [v4l2source]
 always-copy=false
+device=/dev/camera
 [clockoverlay]
 halignment=2
 valignment=1
