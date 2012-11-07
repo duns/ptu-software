@@ -9,21 +9,15 @@ RM := rm -rf
 
 C_SRCS += \
 ./PTU_forwarder.c \
-./json.c \
-./rs232.c \
-./timer.c 
+./json.c 
 
 OBJS += \
 ./PTU_forwarder.o \
-./json.o \
-./rs232.o \
-./timer.o 
+./json.o 
 
 C_DEPS += \
 ./PTU_forwarder.d \
-./json.d \
-./rs232.d \
-./timer.d 
+./json.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
