@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SOURCEBIN=videosource
+SOURCEBIN=/home/root/workspace/ptu-software/bin/videosource
 CFGFILE=/etc/videostream.conf/vsource_cfg
 
 control_c()
