@@ -42,7 +42,6 @@
 #include <plat/dmtimer.h>
 
 #include "pwm.h"
-#defin MIN_PWM_FREQUENCY 20
 
 static int nomux;
 module_param(nomux, int, S_IRUGO);
