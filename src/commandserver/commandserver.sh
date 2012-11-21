@@ -3,6 +3,7 @@
 #### watches for button  presses and executes the appropriate command defined in the conffile
 #### Author: Christos Papachristou (papachristou@novocaptis.com)
 CONFFILE=$1
+BEEPBIN=/usr/bin/beep.sh
 PIPENAME=/tmp/commandserver.fifo
 PIPEFD=7
 . $CONFFILE
@@ -11,6 +12,7 @@ ECHO=true
 #ECHO=echo
 execcmd()
 {
+	${BEEPBIN} &
 	echo $@ | /bin/sh &
 }
 #ECHO=true
