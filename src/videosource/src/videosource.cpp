@@ -25,6 +25,7 @@
 
 #include <boost/program_options.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/thread.hpp>
 
 #include "videosource.hpp"
 
@@ -41,6 +42,9 @@ int
 main( int argc, char* argv[] )
 {
 	GMainLoop* loop = g_main_loop_new( NULL, false );
+	int buffers_passed = -1;
+	long buffers_size = -614400;
+	boost::mutex mutex;
 
 	if( !loop )
 	{
@@ -83,16 +87,18 @@ main( int argc, char* argv[] )
 			return EXIT_FAILURE;
 		}
 
-
 		conf_desc.add_options()
 			( "connection.remote-host"        , app_opts::value<std::string>(), "" )
 			( "connection.port"               , app_opts::value<int>()        , "" )
-			( "connection.transfer-protocol"  , app_opts::value<std::string>(), "" )
 			( "videofilter.video-header"      , app_opts::value<std::string>(), "" )
 			( "videofilter.width"             , app_opts::value<int>()        , "" )
 			( "videofilter.height"            , app_opts::value<int>()        , "" )
 			( "videofilter.framerate-num"     , app_opts::value<int>()        , "" )
 			( "videofilter.framerate-den"     , app_opts::value<int>()        , "" )
+			( "videosource.use-dummy-source"  , app_opts::value<bool>()       , "" )
+			( "datarate.enable-watch"         , app_opts::value<bool>()       , "" )
+			( "datarate.flag-location"        , app_opts::value<std::string>(), "" )
+			( "datarate.min-threshold"        , app_opts::value<int>()        , "" )
 			( "v4l2source.always-copy"        , app_opts::value<bool>()       , "" )
 			( "v4l2source.device"        	  , app_opts::value<std::string>(), "" )
 			( "clockoverlay.halignment"       , app_opts::value<int>()        , "" )
@@ -107,6 +113,7 @@ main( int argc, char* argv[] )
 			( "dsp-encoder.encodingPreset"    , app_opts::value<int>()        , "" )
 			( "dsp-encoder.rateControlPreset" , app_opts::value<int>()        , "" )
 			( "execution.messages-detail"     , app_opts::value<int>()        , "" )
+			( "execution.watchdog-awareness"  , app_opts::value<int>()        , "" )
 		;
 
 		std::ifstream config_file( opts_map["config-path"].as<std::string>().c_str() );
@@ -167,14 +174,42 @@ main( int argc, char* argv[] )
 			gst_bus_add_watch( pipe_bus.get(), pipeline_bus_handler, loop );
 		}
 
-		LOG_CLOG( log_info ) << "Starting pipeline...";
+		if( opts_map["datarate.enable-watch"].as<bool>() )
+		{
+			dt_params d_params = boost::make_tuple( &mutex, &buffers_passed, &buffers_size );
 
-		gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_PLAYING );
-		g_main_loop_run( loop );
-		
-		LOG_CLOG( log_info ) << "Destroying pipeline...";
-		
-		gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_NULL );
+			g_signal_connect( videosource.elements["identity"], "handoff", G_CALLBACK( identity_handler )
+					, static_cast<gpointer>( &d_params ) );
+
+			LOG_CLOG( log_info ) << "Initializing watchdog...";
+
+			auto watch_cfg = boost::bind( watch_loop, &videosource, &mutex, &buffers_passed, &buffers_size
+					, opts_map["datarate.min-threshold"].as<int>()
+					, opts_map["execution.watchdog-awareness"].as<int>()
+					, opts_map["datarate.flag-location"].as<std::string>() );
+
+			boost::thread watch_thread( watch_cfg );
+
+			LOG_CLOG( log_info ) << "Starting pipeline...";
+
+			gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_PLAYING );
+			g_main_loop_run( loop );
+
+			LOG_CLOG( log_info ) << "Destroying pipeline...";
+
+			gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_NULL );
+		}
+		else
+		{
+			LOG_CLOG( log_info ) << "Starting pipeline...";
+
+			gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_PLAYING );
+			g_main_loop_run( loop );
+
+			LOG_CLOG( log_info ) << "Destroying pipeline...";
+
+			gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_NULL );
+		}
 	}
 	catch( const boost::exception& e )
 	{

@@ -83,37 +83,41 @@ namespace video_source
 		videosource_pipeline( const boost::program_options::variables_map& opts_map )
 			: root_bin( GST_BIN( gst_pipeline_new( "videosource" ) ), cust_deleter<GstBin>() )
 		{
-			create_add_element( root_bin, elements, "v4l2src", "v4l2src" );
+			if( !opts_map["videosource.use-dummy-source"].as<bool>() )
+			{
+				create_add_element( root_bin, elements, "v4l2src", "videosrc" );
+			}
+			else
+			{
+				create_add_element( root_bin, elements, "videotestsrc", "videosrc" );
+			}
+
 			create_add_element( root_bin, elements, "ffmpegcolorspace", "ffmpegcs" );
 			create_add_element( root_bin, elements, "TIVidenc1", "dspenc" );
 			create_add_element( root_bin, elements, "gdppay", "gdppay" );
 			create_add_element( root_bin, elements, "clockoverlay", "clockoverlay" );
 			create_add_element( root_bin, elements, "videorate", "videorate" );
 
-			if( !opts_map["connection.transfer-protocol"].as<std::string>().compare( std::string("TCP") ) )
+			if( opts_map["datarate.enable-watch"].as<bool>() )
 			{
-				create_add_element( root_bin, elements, "tcpclientsink", "networksink" );
-
-				g_object_set( G_OBJECT( elements["networksink"] )
-					, "host", opts_map["connection.remote-host"].as<std::string>().c_str()
-					, "port", opts_map["connection.port"].as<int>()
-					, "sync", false
-					, NULL );
-			}
-			else if( !opts_map["connection.transfer-protocol"].as<std::string>().compare( std::string("UDP") ) )
-			{
-				create_add_element( root_bin, elements, "udpsink", "networksink" );
-
-				g_object_set( G_OBJECT( elements["networksink"] )
-					, "host", opts_map["connection.remote-host"].as<std::string>().c_str()
-					, "port", opts_map["connection.port"].as<int>()
-					, NULL );
+				create_add_element( root_bin, elements, "identity", "identity" );
 			}
 
-			g_object_set( G_OBJECT( elements["v4l2src"] )
-				, "always-copy", opts_map["v4l2source.always-copy"].as<bool>()
-				, "device", opts_map["v4l2source.device"].as<std::string>().c_str()
+			create_add_element( root_bin, elements, "tcpclientsink", "networksink" );
+
+			g_object_set( G_OBJECT( elements["networksink"] )
+				, "host", opts_map["connection.remote-host"].as<std::string>().c_str()
+				, "port", opts_map["connection.port"].as<int>()
+				, "sync", false
 				, NULL );
+
+			if( !opts_map["videosource.use-dummy-source"].as<bool>() )
+			{
+				g_object_set( G_OBJECT( elements["videosrc"] )
+					, "always-copy", opts_map["v4l2source.always-copy"].as<bool>()
+					, "device", opts_map["v4l2source.device"].as<std::string>().c_str()
+					, NULL );
+			}
 
 			g_object_set( G_OBJECT( elements["dspenc"] )
 				, "codecName", opts_map["dsp-encoder.codecName"].as<std::string>().c_str()
@@ -132,13 +136,27 @@ namespace video_source
 				, "font-desc", opts_map["clockoverlay.font"].as<std::string>().c_str()
 				, NULL );
 
-			insert_filter( elements["v4l2src"], elements["ffmpegcs"], opts_map );
+			insert_filter( elements["videosrc"], elements["ffmpegcs"], opts_map );
 
-			if( !gst_element_link_many( elements["ffmpegcs"], elements["videorate"], elements["clockoverlay"]
-			   , elements["dspenc"], elements["gdppay"], elements["networksink"], NULL ) )
+			if( opts_map["datarate.enable-watch"].as<bool>() )
 			{
-				LOG_CLOG( log_error ) << "Failed to link elements.";
-				BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+				if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"], elements["videorate"]
+				       , elements["clockoverlay"], elements["dspenc"], elements["gdppay"]
+				       , elements["networksink"], NULL ) )
+				{
+					LOG_CLOG( log_error ) << "Failed to link elements.";
+					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+				}
+			}
+			else
+			{
+				if( !gst_element_link_many( elements["ffmpegcs"], elements["videorate"]
+				       , elements["clockoverlay"], elements["dspenc"], elements["gdppay"]
+				       , elements["networksink"], NULL ) )
+				{
+					LOG_CLOG( log_error ) << "Failed to link elements.";
+					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+				}
 			}
 		}
 
