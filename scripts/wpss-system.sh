@@ -24,6 +24,9 @@ case "$1" in
 #		echo heartbeat > ${WPSS_LED_BLUE}/trigger
 		echo none > ${WPSS_LED_BAT}/trigger
 		echo none > ${WPSS_LED_CON}/trigger
+                /usr/bin/tunes.sh
+		echo on >  /sys/bus/usb/devices/usb1/power/control
+		echo on >  /sys/bus/usb/devices/usb2/power/control
 		echo "."
 
 		;;
