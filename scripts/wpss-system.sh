@@ -4,7 +4,8 @@ case "$1" in
 	start)
 		echo "Starting WPSS system services "
 		echo "Bringing up wireless interface"
-		ifup wlan0
+#		systemctl restart NetworkManager.service
+#		ifup wlan0
 		echo "enabling gpio ${WPSS_SWITCH_3V} (3.3V enable)"
 		gpio_export ${WPSS_SWITCH_3V}
 		gpio_out ${WPSS_SWITCH_3V}
@@ -23,6 +24,9 @@ case "$1" in
 #		echo heartbeat > ${WPSS_LED_BLUE}/trigger
 		echo none > ${WPSS_LED_BAT}/trigger
 		echo none > ${WPSS_LED_CON}/trigger
+                /usr/bin/tunes.sh
+		echo on >  /sys/bus/usb/devices/usb1/power/control
+		echo on >  /sys/bus/usb/devices/usb2/power/control
 		echo "."
 
 		;;
