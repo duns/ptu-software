@@ -4,7 +4,7 @@
 #define SERIAL_PORT_BAUD "SerialPortBaud: %d\n"
 #define UNIT_NAME_SET_LINE "UnitName: %s\n"
 #define SERVER_IP_SET_LINE "ServerIP: %s\n"
-#define SERVER_PORT_SET_LINE "ServerPort: %d\n"
+#define SERVER_PORT_SET_LINE "ServerPort: %s\n"
 #define DOSIMETER_ID_LINE "DosimeterID: %s\n"
 #define MAC_ADDRESS_LINE "MacAddress: %s\n"
 
@@ -34,7 +34,8 @@
 
 #define SAMPLE_MET "OneShoot"
 
-#define PIPE	"/home/root/pipe"
+#define PIPE_WRITE	"/home/root/pipe_write"
+#define PIPE_READ "/home/root/pipe_read"
 #define MAX_BUF_SIZE	255
 
 enum sensor_type { TMP, HUM, O2, CO2, HEART_RATE, DOSE_ACCUM, DOSE_RATE, BODY_TEMP};
@@ -103,7 +104,8 @@ int alert_to_JSON ();
 int ack_to_JSON (char * frame_ack);
 int config_to_JSON (char * file_path, char * file_content);
 int send_msg_to_tcp(char * msg, int len);
-void timer_handler(void);
+void read_serial_port(void);
 void handle_modbus_pkg(void);
+void handle_pipe_msg(void);
 int get_local_hwaddr(const char *ifname, unsigned char *mac);
 uint16_t CheckCRC(uint8_t *pbuffer, uint8_t length);

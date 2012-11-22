@@ -356,7 +356,7 @@ static ssize_t pwm_write(struct file *filp, const char __user *buff,
 
 	sval = simple_strtol(temp, NULL, 0);
 
-	if(sval>0)
+	if(sval>=0)
 	{
 		val=sval;
 

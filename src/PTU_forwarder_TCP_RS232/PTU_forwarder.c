@@ -1,7 +1,9 @@
 #define TCP_CONN
 #define VERBOSE
 #define ERROR_VERB
-#define PIPES
+#define PIPES_WR
+#define PIPES_RD
+#define SERIAL
 #define DEBUG
 
 #include <stdio.h> 
@@ -17,6 +19,7 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <net/if.h>
+#include <netdb.h>
 #include <sys/ioctl.h>
 #include <signal.h>
 #include <sys/types.h>
@@ -26,30 +29,32 @@
 #include <sys/timeb.h>
 
 #include "json.h"
-#include "rs232.h"
-#include "timer.h"
 #include "PTU_forwarder.h"
-
-void timer_handler(void);
 
 int ser_port_baud, serial_port_num;
 char new_modbus_pkg;
 char *mac_address;
-char server_ip[15];
+char server_ip[50];
 char dos_id[6];
 ser_float CO2_emf1;
-uint16_t server_port;
+char server_port[10];
 int frame_id;
 char reply[100];
 unsigned char serial_buf[4096];
+char pipe_wr_buf[100], pipe_rd_buf[4096];
 uint16_t serial_pointer, serial_buf_length;
 modbus_t modbus_pkg;
 enum modbus_state_t modbus_state;
 char tcp_buf[MAX_SRV_MSG_SIZE], json_pkg[MAX_SRV_MSG_SIZE];
 uint16_t tcp_pointer, tcp_buf_length, json_pointer;
-char new_json_msg;
+char new_json_msg, new_pipe_wr;
 enum poll_data_link poll_state;
 char unit[20];
+
+char comports[22][13]={"/dev/ttyS0","/dev/ttyS1","/dev/ttyS2","/dev/ttyS3","/dev/ttyO0","/dev/ttyO1",
+                       "/dev/ttyO2","/dev/ttyO3","/dev/ttyS8","/dev/ttyS9","/dev/ttyS10","/dev/ttyS11",
+                       "/dev/ttyS12","/dev/ttyS13","/dev/ttyS14","/dev/ttyS15","/dev/ttyUSB0",
+                       "/dev/ttyUSB1","/dev/ttyUSB2","/dev/ttyUSB3","/dev/ttyUSB4","/dev/ttyUSB5"};
 
 const unsigned short crc16Table[256] = {
 0X0000, 0XC0C1, 0XC181, 0X0140, 0XC301, 0X03C0, 0X0280, 0XC241,
@@ -97,9 +102,13 @@ const char * register_params[3] = { SAMPLE_RATE_PARAM_NAME, UP_LVL_PARAM_NAME, D
 const char * program_params[7] = {SERVER_IP_PARAM_NAME, SERVER_PORT_PARAM_NAME, SERIAL_PORT_PARAM_NAME, SERIAL_BAUD_PARAM_NAME, DOS_ID_PARAM_NAME, CO2_EMF1_PARAM_NAME, UNIT_NAME_PARAM_NAME};
 
 char * json_msg;
-int tcp_sock, fd_pipe;
+int tcp_sock, cport, pipe_write, pipe_read;
 struct sockaddr_in server;
-
+struct addrinfo hints, *res;
+void sighandler_fn(int sig)
+{
+	exit(sig);
+}
 int main (void)
 {
     struct timeb tp1, tp2;
@@ -108,11 +117,20 @@ int main (void)
 	int retval, max_socket;
 	int times = 1, write_efforts = 0;
 	uint8_t regs_bmp;
-	int i;
+	int pipe_n;
 
+	signal(SIGINT,sighandler_fn);
 	mac_address = malloc(13);
 	init();
     write_conf_settings();
+
+	#ifdef PIPES_WR
+	pipe_write = open(PIPE_WRITE, O_RDWR);
+	#endif
+
+	#ifdef PIPES_RD
+	pipe_read = open(PIPE_READ, O_RDWR);
+	#endif
 
 	while(1)
 	{
@@ -126,45 +144,118 @@ int main (void)
 		fflush(stderr);
 		#endif
 
-		#ifdef TCP_CONN
 		// initialize fd sets & timeout for select()
 		FD_ZERO(&rfds);
+		#ifdef TCP_CONN
 		FD_SET(tcp_sock, &rfds);
+		#endif
+		#ifdef SERIAL
+		FD_SET(cport, &rfds);
+		#endif
+
+		#ifdef PIPES_RD
+		FD_SET(pipe_read, &rfds);
+		#endif
+
 		FD_ZERO(&wfds);
+		#ifdef TCP_CONN
 		FD_SET(tcp_sock, &wfds);
-		max_socket = tcp_sock + 1;
+		#endif
+		#ifdef PIPES_WR
+		FD_SET(pipe_write, &wfds);
+		#endif
+
+		max_socket = -1;
+
+		#ifdef SERIAL
+		if (cport > max_socket) max_socket = cport;
+		#endif
+
+		#ifdef TCP_CONN
+		if (tcp_sock > max_socket) max_socket = tcp_sock;
+		#endif
+
+		#ifdef PIPES_RD
+		if (pipe_read > max_socket) max_socket = pipe_read;
+		#endif
+
+		max_socket += 1;
+
 		tv.tv_sec = 0;
 		tv.tv_usec = 0;
+
 		retval = select(max_socket, &rfds, &wfds, NULL, &tv);
-		if (retval == -1)
+		if (retval > 0)
 		{
+			#ifdef SERIAL
+			if ( FD_ISSET(cport, &rfds) )
+			{
+				read_serial_port();
+			}
+			#endif
+			#ifdef PIPES_RD
+			if ( FD_ISSET(pipe_read, &rfds) )
+			{
+				pipe_n = read(pipe_read, pipe_rd_buf, 4096);
+				if (pipe_n>0)
+				{
+					if (!strcmp(pipe_rd_buf, "panic"))
+					{
+						handle_pipe_msg();
+					}
+				}
+				else
+				{
+					perror("Error reading from pipe:");
+				}
+			}
+			#endif
+			#ifdef PIPES_WR
+			if( FD_ISSET(pipe_write, &wfds) )
+			{
+				if (new_pipe_wr)
+				{
+					if (write(pipe_write, pipe_wr_buf, strlen(pipe_wr_buf)) < 0)
+					{
+						perror("Error writing to pipe:");
+					}
+					new_pipe_wr = 0;
+				}
+			}
+			#endif
+			#ifdef TCP_CONN
+			if( FD_ISSET(tcp_sock, &rfds) && handle_msg_from_server() != 1)
+			{
+				init_tcp_conn();
+				continue;
+			}
+			if( !FD_ISSET(tcp_sock, &wfds) )
+			{
+				if(write_efforts++ > 5)
+				{
+					write_efforts = 0;
+					init_tcp_conn();
+				}
+				continue;
+			}
+			#endif
+		}
+		else if (retval == 0) //timeout
+		{
+			#ifdef TCP_CONN
+			if(write_efforts++ > 5)
+			{
+				write_efforts = 0;
+				init_tcp_conn();
+			}
+			continue;
+			#endif
+		}
+		else
+		{
+			perror("Error select:");
 			exit(retval);
 		}
-		else if (retval == 0)
-		{
-			if(write_efforts++ > 5)
-			{
-				write_efforts = 0;
-				init_tcp_conn();
-			}
-			continue;
-		}
-		
-		if( FD_ISSET(tcp_sock, &rfds) && handle_msg_from_server() != 1)
-		{
-			init_tcp_conn();
-			continue;
-		}
-		if( !FD_ISSET(tcp_sock, &wfds) )  
-		{
-			if(write_efforts++ > 5)
-			{
-				write_efforts = 0;
-				init_tcp_conn();
-			}
-			continue;
-		}
-		#endif
 
 		times++;
 		regs_bmp = expired_timers();
@@ -185,7 +276,7 @@ int main (void)
  */
 void init()
 {
-	int i;
+	int i, n;
 	
 	frame_id = 1;
 
@@ -199,21 +290,46 @@ void init()
 		reg_lvls[i].lvl = MID_LVL;
 	}
 
-	#ifdef TCP_CONN
+	#ifdef PIPES_WR
+	/* Create the named - pipe for writing */
+	n = mkfifo(PIPE_WRITE, 0666);
+	if ((n == -1) && (errno != EEXIST))
+	{
+		#ifdef ERROR_VERB
+		perror("Error creating the named pipe for writing. \n");
+		#endif
+	}
+	#endif
+
+	#ifdef PIPES_RD
+	/* Create the named - pipe for reading */
+	n = mkfifo(PIPE_READ, 0666);
+	if ((n == -1) && (errno != EEXIST))
+	{
+		#ifdef ERROR_VERB
+		perror("Error creating the named pipe for reading. \n");
+		#endif
+	}
+	#endif
+
+	new_pipe_wr = 0;
 	new_json_msg = 0;
 	tcp_pointer = 0;
 	tcp_buf_length = 0;
 	json_pointer = 0;
 	poll_state = START;
+	#ifdef TCP_CONN
     init_tcp_conn();
 	#endif
 
+	#ifdef SERIAL
 	if( init_serial() != 1) 
     {
         exit(-1);
     }
 
 	write_dos_id ();
+	#endif
 }
 
 /*
@@ -223,24 +339,111 @@ void init()
 int init_serial()
 {
 	int ret = 0;
-	if (OpenComport(serial_port_num-1, ser_port_baud))
+	struct termios new_port_settings;
+	int baudr, error;
+
+	if((serial_port_num>22)||(serial_port_num<1))
 	{
 		#ifdef ERROR_VERB
-		printf("Error: Could not open serial port. \n");
+		printf("Error: Illegal serial port number. \n");
 		#endif
+		ret = -1;
+	}
+
+	switch(ser_port_baud)
+	{
+		case      50 : baudr = B50;
+					   break;
+		case      75 : baudr = B75;
+					   break;
+		case     110 : baudr = B110;
+					   break;
+		case     134 : baudr = B134;
+					   break;
+		case     150 : baudr = B150;
+					   break;
+		case     200 : baudr = B200;
+					   break;
+		case     300 : baudr = B300;
+					   break;
+		case     600 : baudr = B600;
+					   break;
+		case    1200 : baudr = B1200;
+					   break;
+		case    1800 : baudr = B1800;
+					   break;
+		case    2400 : baudr = B2400;
+					   break;
+		case    4800 : baudr = B4800;
+					   break;
+		case    9600 : baudr = B9600;
+					   break;
+		case   19200 : baudr = B19200;
+					   break;
+		case   38400 : baudr = B38400;
+					   break;
+		case   57600 : baudr = B57600;
+					   break;
+		case  115200 : baudr = B115200;
+					   break;
+		case  230400 : baudr = B230400;
+					   break;
+		case  460800 : baudr = B460800;
+					   break;
+		case  500000 : baudr = B500000;
+					   break;
+		case  576000 : baudr = B576000;
+					   break;
+		case  921600 : baudr = B921600;
+					   break;
+		case 1000000 : baudr = B1000000;
+					   break;
+		default      :
+						#ifdef ERROR_VERB
+						printf("Error: Invalid serial port baudrate. \n");
+						#endif
+						break;
+	}
+
+	cport = open(comports[serial_port_num-1], O_RDWR | O_NOCTTY);
+	if(cport == -1)
+	{
+		#ifdef ERROR_VERB
+		perror("Error: Unable to open serial port. \n");
+		#endif
+		ret = -1;
 	}
 	else
 	{
-		start_timer(100, &timer_handler);
 		new_modbus_pkg = 0;
 		serial_pointer = 0;
 		serial_buf_length = 0;
 		modbus_state = COMMAND;
 		#ifdef VERBOSE
-		printf("COM1 open\n");
+		printf("Serial port open\n");
 		#endif
 		ret = 1;
 	}
+
+	memset(&new_port_settings, 0, sizeof(new_port_settings));  /* clear the new struct */
+
+	new_port_settings.c_cflag = baudr | CS8 | CLOCAL | CREAD;
+	new_port_settings.c_iflag = IGNPAR;
+	new_port_settings.c_oflag = 0;
+	new_port_settings.c_lflag = 0;
+	new_port_settings.c_cc[VMIN] = 0;      /* block until n bytes are received */
+	new_port_settings.c_cc[VTIME] = 0;     /* block until a timer expires (n * 100 mSec.) */
+	error = tcsetattr(cport, TCSANOW, &new_port_settings);
+
+	if(error == -1)
+	{
+		close(cport);
+		ret = -1;
+		#ifdef ERROR_VERB
+		perror("Error: Unable to adjust serial port settings.\n");
+		#endif
+	}
+
 	return ret;
 }
 
@@ -260,16 +463,24 @@ void init_tcp_conn()
 	while(!connection_ok)
 	{
 		fflush(stdout);
-		stop_timer();
 		while(1)
 		{
+			memset(&hints, 0, sizeof(hints));
+			hints.ai_socktype = SOCK_STREAM;
+			hints.ai_family = PF_INET;
+
+			if ((getaddrinfo(server_ip, server_port, &hints, &res)) != 0)
+			{
+				perror("Error getting server address info:");
+			}
+
 			if(tcp_sock > 0)
 			{
 				if(close(tcp_sock) < 0) 
 				{   
 				}
 			}
-			if ((tcp_sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) >= 0)
+			if ((tcp_sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) >=0)
 			{
 				break;
 			}
@@ -285,13 +496,8 @@ void init_tcp_conn()
 		}
 		while(1)
 		{
-			memset(&server, 0, sizeof(server));       
-			server.sin_family = AF_INET;   
-			inet_aton(server_ip, &server.sin_addr);
-			server.sin_port = htons(server_port); 
-			
-			/* Establish connection */
-			if (connect(tcp_sock, (struct sockaddr *) &server, sizeof(server)) >= 0) 
+			// Establish connection
+			if (connect(tcp_sock, res->ai_addr, res->ai_addrlen) >= 0)
 			{
 				connection_ok = 1;
 				break;
@@ -314,8 +520,8 @@ void init_tcp_conn()
 			}
 		}
 	}
-	start_timer(100, &timer_handler);
 	set_sock_non_block(tcp_sock);
+
 
 	#ifdef VERBOSE
 	printf("Connected with server\n");
@@ -382,21 +588,28 @@ int read_conf_settings()
 {
 	FILE * conf_file;
 	unsigned char mac[IFHWADDRLEN];
-	int temp_port, i, cur_reg;
+	int i, cur_reg;
 	char reg_type[20];
 
 	if ( (conf_file = fopen( CONF_FILE_NAME, "r")) == NULL)
 	{
+		#ifdef ERROR_VERB
+		perror("Error opening config file for reading:");
+		#endif
 		return -1;
 	}
 	if(     fscanf(conf_file, UNIT_NAME_SET_LINE, unit) != 1 ||
 			fscanf(conf_file, SERVER_IP_SET_LINE, server_ip) != 1 ||
-			fscanf(conf_file, SERVER_PORT_SET_LINE, &temp_port) != 1 ||
-            fscanf(conf_file, SERIAL_PORT_NUM, &serial_port_num) != 1 ||
-            fscanf(conf_file, SERIAL_PORT_BAUD, &ser_port_baud) != 1 ||
-            fscanf(conf_file, DOSIMETER_ID_LINE, dos_id) != 1 ||
-            fscanf(conf_file, MAC_ADDRESS_LINE, mac_address) != 1)
+			fscanf(conf_file, SERVER_PORT_SET_LINE, server_port) != 1 ||
+			fscanf(conf_file, SERIAL_PORT_NUM, &serial_port_num) != 1 ||
+			fscanf(conf_file, SERIAL_PORT_BAUD, &ser_port_baud) != 1 ||
+			fscanf(conf_file, DOSIMETER_ID_LINE, dos_id) != 1 ||
+			fscanf(conf_file, MAC_ADDRESS_LINE, mac_address) != 1)
 	{
+		#ifdef ERROR_VERB
+		perror("Error reading config file - PTU parameters:");
+		#endif
+		fclose(conf_file);
 		return -2;
 	}
 
@@ -404,18 +617,23 @@ int read_conf_settings()
 	for (i=0;i<IFHWADDRLEN;i++)
 		snprintf(mac_address+i*2, 13-i*2, "%02x", (unsigned char) mac[i]);
 
-	#ifdef DEBUG
-	printf(UNIT_NAME_SET_LINE, unit);
-	printf(DOSIMETER_ID_LINE, dos_id);
-	#endif
-
 	if (ser_port_baud != 9600 && ser_port_baud != 19200 && ser_port_baud != 38400  && ser_port_baud != 57600  && ser_port_baud != 115200)
-        return -2;
-    
-    for(i = 0; i < NO_OF_REGISTERS; i++)
+	{
+		#ifdef ERROR_VERB
+		printf("Error reading config file - invalid baudrate\n");
+		#endif
+		fclose(conf_file);
+		return -2;
+	}
+
+	for(i = 0; i < NO_OF_REGISTERS; i++)
 	{
 		if(fscanf(conf_file, SENSOR_REG_TYPE_LINE, reg_type) != 1)
 		{
+			#ifdef ERROR_VERB
+			perror("Error reading config file - sensor types:");
+			#endif
+			fclose(conf_file);
 			return -2;
 		}
 		for(cur_reg =0; cur_reg < NO_OF_REGISTERS; cur_reg++)
@@ -425,33 +643,34 @@ int read_conf_settings()
 				break;
 			}
 		}
-		if(cur_reg == NO_OF_REGISTERS) 
-		{  
+		if(cur_reg == NO_OF_REGISTERS)
+		{
+			#ifdef ERROR_VERB
+			printf("Error reading config file - unknown sensor\n");
+			#endif
+			fclose(conf_file);
 			return -2;
 		}
 		if(fscanf(conf_file, SAMPLE_RATE_CONF_LINE, &reg_timers[cur_reg].period) != 1 ||
 				fscanf(conf_file, UP_LVL_CONF_LINE, &reg_lvls[cur_reg].up_thres) != 1 ||
 				fscanf(conf_file, DOWN_LVL_CONF_LINE, &reg_lvls[cur_reg].down_thres) != 1)
-		{  
+		{
+			#ifdef ERROR_VERB
+			perror("Error reading config file - sensor parameters:");
+			#endif
+			fclose(conf_file);
 			return -2;
 		}
 	}
 
-	if(i != NO_OF_REGISTERS) 
+	if(i != NO_OF_REGISTERS)
 	{
+		fclose(conf_file);
 		return -2;
 	}
 
-	if (temp_port < 1024 || temp_port > 65535)
-	{
-		return -2;
-	}
-	if(inet_pton(AF_INET, server_ip, &server.sin_addr) == 0)
-	{
-		return -2;
-	}
 	fclose(conf_file);
-	server_port = (uint16_t)temp_port;
+
 	return 1;
 }
 
@@ -465,6 +684,9 @@ int write_conf_settings()
 
 	if ( (conf_file = fopen( CONF_FILE_NAME, "w")) == NULL)
 	{ 
+		#ifdef ERROR_VERB
+		perror("Error opening config file for writing:");
+		#endif
 		return -1;
 	}
 	if( (sum +=fprintf(conf_file, UNIT_NAME_SET_LINE, unit)) <= 0 ||
@@ -475,6 +697,10 @@ int write_conf_settings()
 			(sum +=fprintf(conf_file, DOSIMETER_ID_LINE, dos_id)) <= 0 ||
 			(sum +=fprintf(conf_file, MAC_ADDRESS_LINE, mac_address)) <= 0)
 	{     
+		#ifdef ERROR_VERB
+		perror("Error writing config file - PTU parameters:");
+		#endif
+		fclose(conf_file);
 		return -2;
 	}
 	for(cur_reg = 0; cur_reg < NO_OF_REGISTERS; cur_reg++)
@@ -484,6 +710,10 @@ int write_conf_settings()
 			(sum +=fprintf(conf_file, UP_LVL_CONF_LINE, reg_lvls[cur_reg].up_thres)) <= 0 ||
 			(sum +=fprintf(conf_file, DOWN_LVL_CONF_LINE, reg_lvls[cur_reg].down_thres)) <= 0)
 		{ 
+			#ifdef ERROR_VERB
+			perror("Error writing config file - sensor parameters:");
+			#endif
+			fclose(conf_file);
 			return -2;
 		}
 	}
@@ -529,7 +759,12 @@ void write_dos_id ()
 	pkg[7] = (uint8_t) (crc >> 8);
 	pkg[8] = (uint8_t) (crc);
 
-	SendBuf(serial_port_num-1, pkg, 9);
+	if(write(cport, pkg, 9) != 9)
+	{
+		#ifdef ERROR_VERB
+		perror("Error sending DosID byte 0:");
+		#endif
+	}
 
 	pkg[0] = 0x06;
 	pkg[1] = 0x00;
@@ -542,7 +777,12 @@ void write_dos_id ()
 	pkg[7] = (uint8_t) (crc >> 8);
 	pkg[8] = (uint8_t) (crc);
 
-	SendBuf(serial_port_num-1, pkg, 9);
+	if(write(cport, pkg, 9) != 9)
+	{
+		#ifdef ERROR_VERB
+		perror("Error sending DosID byte 1:");
+		#endif
+	}
 }
 
 /*
@@ -564,7 +804,12 @@ void CO2_calibrate()
 	pkg[7] = (uint8_t) (crc >> 8);
 	pkg[8] = (uint8_t) (crc);
 
-	SendBuf(serial_port_num-1, pkg, 9);
+	if(write(cport, pkg, 9) != 9)
+	{
+		#ifdef ERROR_VERB
+		perror("Error calibrating CO2 sensor:");
+		#endif
+	}
 }
 
 /*
@@ -587,7 +832,7 @@ int read_meas_register(uint8_t reg, uint8_t num)
 	pkg[5] = (uint8_t) (crc >> 8);
 	pkg[6] = (uint8_t) (crc);
 	
-	if(SendBuf(serial_port_num-1, pkg, 7) != 7)
+	if(write(cport, pkg, 7) != 7)
 	{
 		#ifdef ERROR_VERB
 		printf("Error: read command could not be sent\n");
@@ -608,7 +853,9 @@ uint8_t read_registers(uint8_t regs_bitmap)
 	uint8_t reg;
 	for(reg = 1; reg <= NO_OF_REGISTERS; reg++)
         if(regs_bitmap & (1 << (reg - 1)))
+			#ifdef SERIAL
             if(read_meas_register(reg,1) != 1) regs_bitmap &= ~(1 << (reg - 1));
+			#endif
 	return regs_bitmap;
 }
 
@@ -620,7 +867,7 @@ int meas_to_JSON(uint8_t sensors_bitmap)
 {
 	int cur_reg;
 	json_t *entry, *array_elem, *array;
-	char  txt_buf[20], *text, *meas_unit, * sensor, pipe_buf[100];
+	char  txt_buf[20], *text, *meas_unit, * sensor;
 	struct tm * timeinfo;
 	
 	entry = json_new_object();
@@ -672,19 +919,9 @@ int meas_to_JSON(uint8_t sensors_bitmap)
 			reg_lvls[cur_reg].alarm =NO_ALARM;
 			strcpy(lvl_str, "UpLevel");
 			thres = reg_lvls[cur_reg].up_thres;
-			#ifdef PIPES
-			if ((fd_pipe = open(PIPE, O_WRONLY)) == -1)
-			{
-				#ifdef ERROR_VERB
-				printf("Error: Could not open pipe.\n");
-				#endif
-			}
-			else
-			{
-				sprintf(pipe_buf, "UpLevel_%s", sensor_type_str[cur_reg ]);
-				write(fd_pipe, pipe_buf, strlen(pipe_buf));
-				close(fd_pipe);
-			}
+			#ifdef PIPES_WR
+			sprintf(pipe_wr_buf, "Event2_UpLevel_%s", sensor_type_str[cur_reg ]);
+			new_pipe_wr = 1;
 			#endif
 		}
 		else if ( reg_lvls[cur_reg].alarm == DOWN_ALARM )
@@ -692,19 +929,9 @@ int meas_to_JSON(uint8_t sensors_bitmap)
 			reg_lvls[cur_reg].alarm =NO_ALARM;
 			strcpy(lvl_str, "DownLevel");
 			thres = reg_lvls[cur_reg].down_thres;
-			#ifdef PIPES
-			if ((fd_pipe = open(PIPE, O_WRONLY)) == -1)
-			{
-				#ifdef ERROR_VERB
-				printf("Error: Could not open pipe.\n");
-				#endif
-			}
-			else
-			{
-				sprintf(pipe_buf, "DownLevel_%s", sensor_type_str[cur_reg ]);
-				write(fd_pipe, pipe_buf, strlen(pipe_buf));
-				close(fd_pipe);
-			}
+			#ifdef PIPES_WR
+			sprintf(pipe_wr_buf, "Event2_DownLevel_%s", sensor_type_str[cur_reg ]);
+			new_pipe_wr = 1;
 			#endif
 		}
 		else
@@ -1008,14 +1235,14 @@ int parse_json_msg()
 								{
 									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
 									svalue = cursor->child->text;
-									strncpy(server_ip,svalue,15);
+									strncpy(server_ip,svalue,50);
 								}
 								//Write server port
 								else if( !strcmp(cursor->child->text, program_params[1]) )
 								{
 									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
-									ret = sscanf(cursor->child->text, "%f",&value);
-									if (ret == 1 ) server_port = value;
+									svalue = cursor->child->text;
+									strncpy(server_port,svalue,5);
 								}
 								//Write serial port name
 								else if( !strcmp(cursor->child->text, program_params[2]) )
@@ -1043,7 +1270,9 @@ int parse_json_msg()
 									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
 									svalue = cursor->child->text;
 									strncpy(dos_id,svalue,6);
+									#ifdef SERIAL
 									write_dos_id();
+									#endif
 								}
 								//Write CO2 EMF1 value for calibration of CO2 sensor
 								else if( !strcmp(cursor->child->text, program_params[5]) )
@@ -1053,7 +1282,9 @@ int parse_json_msg()
 									if (ret == 1 )
 									{
 										CO2_emf1.val = value;
+										#ifdef SERIAL
 										CO2_calibrate();
+										#endif
 									}
 								}
 								//Write PTU unit name
@@ -1148,6 +1379,12 @@ int parse_json_msg()
 							    }
 							    fclose(conf_file);
 							}
+							else
+							{
+								#ifdef ERROR_VERB
+								perror("Error opening file for reading:");
+								#endif
+							}
 						}
 					}
 					else if (!strcmp(cursor->child->text, "WriteFile"))
@@ -1163,12 +1400,15 @@ int parse_json_msg()
 								{
 									fd_write = fileno(conf_file);
 									//Write config file
-									file_content = malloc(strlen(cursor->child->text));
-									file_content = cursor->child->text;
-									write(fd_write, file_content, strlen(cursor->child->text));
-									if (file_content != NULL) free(file_content);
+									write(fd_write, cursor->child->text, strlen(cursor->child->text));
 								}
 								fclose(conf_file);
+							}
+							else
+							{
+								#ifdef ERROR_VERB
+								perror("Error opening file for writing:");
+								#endif
 							}
 						}
 					}
@@ -1184,10 +1424,10 @@ int parse_json_msg()
 }
 
 /*
- *Timer handler to receive data from serial port, parse the received package, store the
+ *Receive data from serial port, parse the received package, store the
  *sensor measurement and send json messages to the server.
  */
-void timer_handler(void)
+void read_serial_port(void)
 {
     unsigned char in;
 
@@ -1195,7 +1435,7 @@ void timer_handler(void)
 	{
 		if (serial_pointer == serial_buf_length)
 		{
-			serial_buf_length = PollComport(serial_port_num-1, serial_buf, 4095);
+			serial_buf_length = read(cport, serial_buf, 4096);
 			serial_pointer = 0;
 		}
 		while (!new_modbus_pkg && serial_pointer<serial_buf_length)
@@ -1329,19 +1569,9 @@ void handle_modbus_pkg()
 				}
 				if (json_msg != NULL) free(json_msg);
 				#endif
-				#ifdef PIPES
-				if ((fd_pipe = open(PIPE, O_WRONLY)) == -1)
-				{
-					#ifdef ERROR_VERB
-					printf("Error: Could not open pipe.\n");
-					#endif
-				}
-				else
-				{
-					sprintf(print_buf, "FallDetection_Accelerometer");
-					write(fd_pipe, print_buf, strlen(print_buf));
-					close(fd_pipe);
-				}
+				#ifdef PIPES_WR
+				sprintf(pipe_wr_buf, "Event2_FallDetection_Accelerometer");
+				new_pipe_wr = 1;
 				#endif
 			}
 			else if (registers[j].register_id == 0x0A)//dose rate alert
@@ -1364,19 +1594,9 @@ void handle_modbus_pkg()
 				}
 				if (json_msg != NULL) free(json_msg);
 				#endif
-				#ifdef PIPES
-				if ((fd_pipe = open(PIPE, O_WRONLY)) == -1)
-				{
-					#ifdef ERROR_VERB
-					printf("Error: Could not open pipe.\n");
-					#endif
-				}
-				else
-				{
-					sprintf(print_buf, "DoseRateAlert_DoseRate");
-					write(fd_pipe, print_buf, strlen(print_buf));
-					close(fd_pipe);
-				}
+				#ifdef PIPES_WR
+				sprintf(pipe_wr_buf, "Event2_DoseRateAlert_DoseRate");
+				new_pipe_wr = 1;
 				#endif
 			}
 			else if (registers[j].register_id == 0x0B)//dosimeter connection status change
@@ -1408,19 +1628,9 @@ void handle_modbus_pkg()
 				}
 				if (json_msg != NULL) free(json_msg);
 				#endif
-				#ifdef PIPES
-				if ((fd_pipe = open(PIPE, O_WRONLY)) == -1)
-				{
-					#ifdef ERROR_VERB
-					printf("Error: Could not open pipe.\n");
-					#endif
-				}
-				else
-				{
-					sprintf(print_buf, "DosConnectionStatus_%s", dos_status);
-					write(fd_pipe, print_buf, strlen(print_buf));
-					close(fd_pipe);
-				}
+				#ifdef PIPES_WR
+				sprintf(pipe_wr_buf, "Event2_DosConnectionStatus_%s", dos_status);
+				new_pipe_wr = 1;
 				#endif
 			}
 			else if (registers[j].register_id != 0x64)
@@ -1474,6 +1684,35 @@ void handle_modbus_pkg()
 		}
 		new_modbus_pkg = 0;
 	}
+}
+
+void handle_pipe_msg(void)
+{
+	int json_len;
+
+	#ifdef PIPES_WR
+	sprintf(pipe_wr_buf, "Event1_Panic");
+	new_pipe_wr = 1;
+	#endif
+
+	#ifdef TCP_CONN
+	json_len = alert_to_JSON("PanicEvent","PanicButton");
+	frame_id++;
+	if ( !send_msg_to_tcp(json_msg, json_len) )
+	{
+		init_tcp_conn();
+		#ifdef DEBUG
+		printf("Debug: Try to initialize TCP.\n");
+		#endif
+	}
+	else
+	{
+		#ifdef DEBUG
+		printf("Debug: JSON PanicEvent transmitted.\n");
+		#endif
+	}
+	if (json_msg != NULL) free(json_msg);
+	#endif
 }
 
 int get_local_hwaddr(const char *ifname, unsigned char *mac)

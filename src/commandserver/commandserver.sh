@@ -3,19 +3,23 @@
 #### watches for button  presses and executes the appropriate command defined in the conffile
 #### Author: Christos Papachristou (papachristou@novocaptis.com)
 CONFFILE=$1
+BEEPBIN=/usr/bin/beep.sh
 PIPENAME=/tmp/commandserver.fifo
 PIPEFD=7
 . $CONFFILE
 KEYCODES="$PWRBTNKEYCODE $VOLUMEUPKEYCODE $VOLUMEDOWNKEYCODE $PANICKEYCODE $CALLCKEYCODE"
 ECHO=true
+#ECHO=echo
 execcmd()
 {
+	${BEEPBIN} &
 	echo $@ | /bin/sh &
 }
 #ECHO=true
 test_time_elapsed()
 {
-	RET=`echo $1-$2\>$3 | bc -l`
+#	RET=`echo $1-$2\>$3 | bc `
+	RET=`echo $1 $2 $3 | awk -e '{printf("%d",$1-$2>$3)}'`
 	[ $RET -eq 1 ] && return 0
 	return 1
 }
@@ -35,14 +39,15 @@ eventhandler()
 	while true;
 		do
 #			READLINE=`echo "exec 7<> ${PIPENAME};read -u7 -t1 TIME CODE VAL ;RETVAL=\\$?;echo set TIME=\\$TIME \; CODE=\\$CODE \; VAL=\\$VAL ;return \\$RETVAL" |/bin/sh`
-			READLINE=`echo "exec 7<> ${PIPENAME};read -u7 -t1 LINE;RETVAL=\\$?;echo \\$LINE;return \\$RETVAL" |/bin/sh`
+			READLINE=`echo "exec 7<> ${PIPENAME};read -u7 -t1 LINE;RETVAL=\\$?;echo \\$LINE;exit \\$RETVAL" |/bin/sh`
 			RETVAL=$?
 			TIME=`echo $READLINE | awk '{print $1}'`
 			CODE=`echo $READLINE | awk '{print $2}'`
 			VAL=`echo $READLINE | awk '{print $3}'`
 			case $RETVAL in
 				0)
-					[ $CODE = $PWRBTNKEYCODE ] && VAL=`echo ! $VAL | bc`
+					[ $CODE = $PWRBTNKEYCODE ] && VAL=`echo $VAL | awk -e '{printf("%d",!$1)}'`
+#					[ $CODE = $PWRBTNKEYCODE ] && VAL=`echo ! $VAL | bc`
 					case ${VAL} in
 					0)
 #						${ECHO} button down
@@ -56,7 +61,7 @@ eventhandler()
 					esac
 #				${ECHO} event $TIME / $CODE / $VAL
 				;;
-				1)
+				142)
 				TIME=`date +%s.%N`
 				;;
 				*)
@@ -137,7 +142,7 @@ eventhandler()
 											;;
 										$VOLUMEDOWNKEYCODE)
 											${ECHO} volume down  long press
-											execcmd $VOLUMEDOWNSHORTPRESSCMD
+											execcmd $VOLUMEDOWNLONGPRESSCMD
 											;;
 										$PANICKEYCODE)
 											${ECHO} panic long  press
