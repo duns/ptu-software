@@ -37,7 +37,7 @@ namespace video_source
 	 * @ingroup video_source
 	 * @brief Custom identity handler argument type
 	 **/
-	typedef boost::tuple<boost::mutex*, int*, long*> dt_params;
+	typedef boost::tuple<boost::mutex*, long*, long*> dt_params;
 
 	/**
 	 * @ingroup video_source
@@ -62,6 +62,8 @@ namespace video_source
 
 		*m_data->get<1>() += 1;
 		*m_data->get<2>() += buffer->size;
+
+		if( *m_data->get<1>() == 0 ) *m_data->get<1>() += 1;
 	}
 
 	/**
@@ -131,14 +133,13 @@ namespace video_source
  	 * @ingroup video_source
 	 * @brief Watch-dog thread loop
 	 *
-	 * The watch-dog thread periodically tests the traffic counter to determine whether the data streaming is
-	 * taking place without problems. In case it finds out that the traffic is low (by comparing it against the
-	 * provided threshold) it signals the pipeline to stop and destroy itself.
+	 * The watch-dog thread periodically tests the data traffic accumulator. In case it finds out that the
+	 * traffic is low (by comparing it against the provided threshold) it signals the pipeline to destroy itself.
 	 *
 	 * @sa <a href="gstreamer.freedesktop.org/data/doc/gstreamer/head/gstreamer-plugins/html/gstreamer
 -plugins-input-selector.html">Gstreamer input-selector element</a>
 	 *
-	 * @param pipeline streaming gstreamer pipeline
+	 * @param pipeline a pointer to the video streaming pipeline
 	 * @param mutex a pointer to a mutex provided by the executing pipeline
 	 * @param buffers_passed a reference to the traffic counter
 	 * @param buffers_size a reference to the traffic's size accumulator
@@ -148,7 +149,7 @@ namespace video_source
 	 * system
 	 */
 	static void
-	watch_loop( videosource_pipeline* pipeline, boost::mutex* mutex, int* buffers_passed, long* buffers_size
+	watch_loop( videosource_pipeline* pipeline, boost::mutex* mutex, long* buffers_passed, long* buffers_size
 			, int rate_min_thres, int qos_milli_time, const std::string& flag_path )
 	{
 		while( true )

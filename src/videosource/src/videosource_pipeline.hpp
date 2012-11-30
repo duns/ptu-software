@@ -28,18 +28,18 @@ namespace video_source
 
 	/**
 	 * @ingroup video_source
-	 * @brief Intercepts two consecutive elements with a caps filter
-	 * Given two Gstreamer elements that are indented to be linked against each other, this function inserts
-	 * a hard-coded filter element in between and performs the linking.
+	 * @brief Intercepts two consecutive video elements with a caps filter
+	 * Given two Gstreamer elements, this function inserts a video filter element in between and performs the
+	 * linking. Caution, it links only elements that are video-related.
 	 *
 	 * @param elem1 assuming a left-to-right flow this is the left-most element
 	 * @param elem2 assuming a left-to-right flow this is the right-most element
-	 * @param opts_map set of options for setting the filter properties
+	 * @param opts_map set of filter properties
 	 *
 	 * @throws video_streamer::api_error in case the element linking failed
 	 */
 	inline void
-	insert_filter( GstElement* elem1, GstElement* elem2, const boost::program_options::variables_map& opts_map )
+	insert_video_filter( GstElement* elem1, GstElement* elem2, const boost::program_options::variables_map& opts_map )
 	{
 		gboolean link_flag = false;
 		GstCaps* caps;
@@ -57,7 +57,42 @@ namespace video_source
 
 		if( !link_flag )
 		{
-			LOG_CLOG( log_error ) << "Filter linking error.";
+			LOG_CLOG( log_error ) << "Video filter linking error.";
+			BOOST_THROW_EXCEPTION( api_error() << api_info( "Couldn't connect to filter." ) );
+		}
+	}
+
+	/**
+	 * @ingroup video_source
+	 * @brief Intercepts two consecutive audio elements with a caps filter
+	 * Given two Gstreamer elements, this function inserts a audio filter element in between and performs the
+	 * linking. Caution, it links only elements that are audio-related.
+	 *
+	 * @param elem1 assuming a left-to-right flow this is the left-most element
+	 * @param elem2 assuming a left-to-right flow this is the right-most element
+	 * @param opts_map set of filter properties
+	 *
+	 * @throws video_streamer::api_error in case the element linking failed
+	 */
+	inline void
+	insert_audio_filter( GstElement* elem1, GstElement* elem2, const boost::program_options::variables_map& opts_map )
+	{
+		gboolean link_flag = false;
+		GstCaps* caps;
+
+		caps = gst_caps_new_simple( opts_map["audiofilter.audio-header"].as<std::string>().c_str()
+		  , "rate", G_TYPE_INT, opts_map["audiofilter.rate"].as<int>()
+		  , "channels", G_TYPE_INT, opts_map["audiofilter.channels"].as<int>()
+		  , "depth", G_TYPE_INT, opts_map["audiofilter.depth"].as<int>()
+		  , NULL );
+
+		link_flag = gst_element_link_filtered( elem1, elem2, caps );
+
+		gst_caps_unref( caps );
+
+		if( !link_flag )
+		{
+			LOG_CLOG( log_error ) << "Audio filter linking error.";
 			BOOST_THROW_EXCEPTION( api_error() << api_info( "Couldn't connect to filter." ) );
 		}
 	}
@@ -66,9 +101,10 @@ namespace video_source
 	 * @ingroup video_source
 	 * @brief Video streamer source (ptu-side) pipeline.
 	 *
-	 * The pipeline streams video from a v4l2 device to a network target. The topology of the pipeline is shown
-	 * here: <add reference to schema>. The user of this object has unrestricted access to each and every
-	 * pipeline element.
+	 * The pipeline streams video and optionally, audio, from a physical source (i.e. v4l2 device) or a dummy
+	 * (i.e. gstreamer test source elements) one, to a network target. The possible pipeline topologies can be
+	 * found here: <add reference to schemas>. The user of this object has unrestricted access to every pipeline
+	 * element.
 	 */
 	struct videosource_pipeline
 	{
@@ -90,13 +126,18 @@ namespace video_source
 			else
 			{
 				create_add_element( root_bin, elements, "videotestsrc", "videosrc" );
+
+				g_object_set( G_OBJECT( elements["videosrc"] )
+					, "pattern", opts_map["videosource.dummy-pattern"].as<int>()
+					, NULL );
 			}
 
 			create_add_element( root_bin, elements, "ffmpegcolorspace", "ffmpegcs" );
 			create_add_element( root_bin, elements, "TIVidenc1", "dspenc" );
-			create_add_element( root_bin, elements, "gdppay", "gdppay" );
+			create_add_element( root_bin, elements, "queue", "queue0" );
+			create_add_element( root_bin, elements, "queue", "queue1" );
 			create_add_element( root_bin, elements, "clockoverlay", "clockoverlay" );
-			create_add_element( root_bin, elements, "videorate", "videorate" );
+			create_add_element( root_bin, elements, "mpegtsmux", "mux" );
 
 			if( opts_map["datarate.enable-watch"].as<bool>() )
 			{
@@ -106,9 +147,13 @@ namespace video_source
 			create_add_element( root_bin, elements, "tcpclientsink", "networksink" );
 
 			g_object_set( G_OBJECT( elements["networksink"] )
-				, "host", opts_map["connection.remote-host"].as<std::string>().c_str()
-				, "port", opts_map["connection.port"].as<int>()
-				, "sync", false
+				, "host"             , opts_map["connection.remote-host"].as<std::string>().c_str()
+				, "port"             , opts_map["connection.port"].as<int>()
+				, "qos"              , opts_map["connection.qos"].as<bool>()
+				, "max-lateness"     , opts_map["connection.max-lateness"].as<long>()
+				, "sync"             , opts_map["connection.sync"].as<bool>()
+				, "preroll-queue-len", opts_map["connection.preroll-queue-len"].as<unsigned int>()
+				, "blocksize"        , opts_map["connection.blocksize"].as<unsigned int>()
 				, NULL );
 
 			if( !opts_map["videosource.use-dummy-source"].as<bool>() )
@@ -136,27 +181,116 @@ namespace video_source
 				, "font-desc", opts_map["clockoverlay.font"].as<std::string>().c_str()
 				, NULL );
 
-			insert_filter( elements["videosrc"], elements["ffmpegcs"], opts_map );
+			insert_video_filter( elements["videosrc"], elements["ffmpegcs"], opts_map );
 
 			if( opts_map["datarate.enable-watch"].as<bool>() )
 			{
-				if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"], elements["videorate"]
-				       , elements["clockoverlay"], elements["dspenc"], elements["gdppay"]
-				       , elements["networksink"], NULL ) )
+				if( opts_map["datarate.watch-position"].as<int>() == 1 )
+				{
+					LOG_CLOG( log_info ) << "Registering watch on Camera stream...";
+
+					if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"]
+					        , elements["clockoverlay"], elements["dspenc"], elements["queue0"], elements["mux"]
+					        , elements["queue1"], elements["networksink"], NULL ) )
+					{
+						LOG_CLOG( log_error ) << "Failed to link elements.";
+						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+					}
+				}
+				else if( opts_map["datarate.watch-position"].as<int>() == 2 )
+				{
+					LOG_CLOG( log_info ) << "Registering watch on DSP video encoder stream...";
+
+					if( !gst_element_link_many( elements["ffmpegcs"], elements["clockoverlay"]
+					        , elements["dspenc"], elements["identity"], elements["queue0"], elements["mux"]
+					        , elements["queue1"], elements["networksink"], NULL ) )
+					{
+						LOG_CLOG( log_error ) << "Failed to link elements.";
+						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+					}
+				}
+				else if( opts_map["datarate.watch-position"].as<int>() == 3 )
+				{
+					LOG_CLOG( log_info ) << "Registering watch on MPEG TS stream before queue1...";
+
+					if( !gst_element_link_many( elements["ffmpegcs"], elements["clockoverlay"]
+					        , elements["dspenc"], elements["queue0"], elements["mux"], elements["identity"]
+					        , elements["queue1"], elements["networksink"], NULL ) )
+					{
+						LOG_CLOG( log_error ) << "Failed to link elements.";
+						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+					}
+				}
+				else if( opts_map["datarate.watch-position"].as<int>() == 4 )
+				{
+					LOG_CLOG( log_info ) << "Registering watch on MPEG TS stream after queue1...";
+
+					if( !gst_element_link_many( elements["ffmpegcs"], elements["clockoverlay"]
+					        , elements["dspenc"], elements["queue0"], elements["mux"], elements["queue1"]
+					        , elements["identity"], elements["networksink"], NULL ) )
+					{
+						LOG_CLOG( log_error ) << "Failed to link elements.";
+						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+					}
+				}
+			}
+			else
+			{
+				if( !gst_element_link_many( elements["ffmpegcs"], elements["clockoverlay"], elements["dspenc"]
+				        , elements["queue0"], elements["mux"], elements["networksink"], NULL ) )
 				{
 					LOG_CLOG( log_error ) << "Failed to link elements.";
 					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 				}
 			}
-			else
+
+			if( opts_map["audiosource.enable-audio"].as<bool>() )
 			{
-				if( !gst_element_link_many( elements["ffmpegcs"], elements["videorate"]
-				       , elements["clockoverlay"], elements["dspenc"], elements["gdppay"]
-				       , elements["networksink"], NULL ) )
+				if( !opts_map["audiosource.use-dummy-source"].as<bool>() )
+				{
+					create_add_element( root_bin, elements, "alsasrc", "audiosrc" );
+
+					g_object_set( G_OBJECT( elements["audiosrc"] )
+						, "device", opts_map["audiosource.device"].as<std::string>().c_str()
+						, NULL );
+				}
+				else
+				{
+					create_add_element( root_bin, elements, "audiotestsrc", "audiosrc" );
+				}
+
+				create_add_element( root_bin, elements, "lame", "audioenc" );
+				create_add_element( root_bin, elements, "queue", "queue2" );
+				create_add_element( root_bin, elements, "audioresample", "audioresample" );
+
+				insert_audio_filter( elements["audiosrc"], elements["audioresample"], opts_map );
+
+				if( !gst_element_link_many( elements["audioresample"], elements["audioenc"], elements["queue2"]
+				        , NULL ) )
 				{
 					LOG_CLOG( log_error ) << "Failed to link elements.";
 					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 				}
+
+				GstPad *queue_src, *mux_sink;
+
+				mux_sink = gst_element_get_request_pad( elements["mux"], "sink_%d" );
+				queue_src = gst_element_get_static_pad( elements["queue2"], "src" );
+
+				if( !queue_src | !mux_sink )
+				{
+					LOG_CLOG( log_error ) << "Failed to retrieve element pads.";
+					BOOST_THROW_EXCEPTION( api_error() << api_info( "Pad retrieving error." ) );
+				}
+
+				if( gst_pad_link( queue_src, mux_sink ) != GST_PAD_LINK_OK )
+				{
+					LOG_CLOG( log_error ) << "Failed to link pads.";
+					BOOST_THROW_EXCEPTION( api_error() << api_info( "Pad linking error." ) );
+				}
+
+				gst_object_unref( queue_src );
+				gst_object_unref( mux_sink );
 			}
 		}
 
