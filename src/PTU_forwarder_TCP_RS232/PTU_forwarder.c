@@ -5,7 +5,16 @@
 #define PIPES_RD
 #define SERIAL
 #define DEBUG
-
+//#define DEBUGPRINT
+#ifdef DEBUGPRINT
+#define DEBUGTEST 1
+#else
+#define DEBUGTEST 0
+#endif
+#define debug_print(fmt, ...) do { if (DEBUGTEST) \
+       fprintf(stderr, "%s:%d:%s(): " fmt, __FILE__, \
+        __LINE__, __func__, ##__VA_ARGS__); \
+	}while(0)
 #include <stdio.h> 
 #include <unistd.h>
 #include <stdlib.h>
@@ -109,7 +118,35 @@ void sighandler_fn(int sig)
 {
 	exit(sig);
 }
-int main (void)
+int check_for_hung_TCP_connection(int secs)
+{
+	fd_set  wfds;
+	struct timeval tv;
+	int retval, max_socket;
+
+	FD_ZERO(&wfds);
+	FD_SET(tcp_sock, &wfds);
+	max_socket=tcp_sock+1;
+	tv.tv_sec = secs;
+	tv.tv_usec = 000000;
+//test if tcp socket connection would block
+	retval = select(max_socket,  NULL , &wfds , NULL, &tv);
+	if (retval > 0)
+	{
+//OK, seems alive (TODO : should also try to send and receive ping to be sure), return success
+		return 0;
+	}
+	else
+		if(retval==0)
+		{
+			//TCP connection would block after tv time, return failure
+			return 1;
+		}
+// some other error occured, maybe should be somehow handled
+	perror("select");
+	return -1;
+}
+int main (int argc,char *argv[])
 {
     struct timeb tp1, tp2;
 	fd_set rfds, wfds;
@@ -161,9 +198,9 @@ int main (void)
 		#ifdef TCP_CONN
 		FD_SET(tcp_sock, &wfds);
 		#endif
-		#ifdef PIPES_WR
-		FD_SET(pipe_write, &wfds);
-		#endif
+//		#ifdef PIPES_WR
+//		FD_SET(pipe_write, &wfds);
+//		#endif
 
 		max_socket = -1;
 
@@ -182,20 +219,22 @@ int main (void)
 		max_socket += 1;
 
 		tv.tv_sec = 0;
-		tv.tv_usec = 0;
+		tv.tv_usec = 500000;
 
-		retval = select(max_socket, &rfds, &wfds, NULL, &tv);
+		retval = select(max_socket, &rfds, NULL , NULL, &tv);
 		if (retval > 0)
 		{
 			#ifdef SERIAL
 			if ( FD_ISSET(cport, &rfds) )
 			{
+			debug_print("serial\n");
 				read_serial_port();
 			}
 			#endif
 			#ifdef PIPES_RD
 			if ( FD_ISSET(pipe_read, &rfds) )
 			{
+			debug_print("pipe rd\n");
 				pipe_n = read(pipe_read, pipe_rd_buf, 4096);
 				if (pipe_n>0)
 				{
@@ -210,27 +249,18 @@ int main (void)
 				}
 			}
 			#endif
-			#ifdef PIPES_WR
-			if( FD_ISSET(pipe_write, &wfds) )
-			{
-				if (new_pipe_wr)
-				{
-					if (write(pipe_write, pipe_wr_buf, strlen(pipe_wr_buf)) < 0)
-					{
-						perror("Error writing to pipe:");
-					}
-					new_pipe_wr = 0;
-				}
-			}
-			#endif
 			#ifdef TCP_CONN
 			if( FD_ISSET(tcp_sock, &rfds) && handle_msg_from_server() != 1)
 			{
+			debug_print("tcp con rd\n");
 				init_tcp_conn();
 				continue;
 			}
+// PROBLEM: Should be done in a separate function that calls select only for wfds periodically, to check for hung connections
+/*
 			if( !FD_ISSET(tcp_sock, &wfds) )
 			{
+			debug_print("tcp con wr\n");
 				if(write_efforts++ > 5)
 				{
 					write_efforts = 0;
@@ -238,10 +268,15 @@ int main (void)
 				}
 				continue;
 			}
+*/
 			#endif
 		}
 		else if (retval == 0) //timeout
 		{
+
+			debug_print("timeout\n");
+// WHY HERE. Different semantics for rfds and wfds
+/*
 			#ifdef TCP_CONN
 			if(write_efforts++ > 5)
 			{
@@ -250,13 +285,34 @@ int main (void)
 			}
 			continue;
 			#endif
+*/
 		}
 		else
 		{
 			perror("Error select:");
 			exit(retval);
 		}
+#ifdef PIPES_WR
+		if (new_pipe_wr)
+		{
+			debug_print("new pipe wr\n");
+				if (write(pipe_write, pipe_wr_buf, strlen(pipe_wr_buf)) < 0)
+				{
+					perror("Error writing to pipe:");
+				}
+				new_pipe_wr = 0;
+		}
+#endif
 
+		if(check_for_hung_TCP_connection(5))
+		{
+			//TCP connection would block after 5 secs, reinit
+			debug_print("TCP would block, reinit\n");
+			//TODO : Does this work cleanly or just exit?
+			init_tcp_conn();
+//
+		}
+// TODO : at this point timers are updated non periodicaly, ensure that this poses no problem
 		times++;
 		regs_bmp = expired_timers();
 		reset_expired_timers();
