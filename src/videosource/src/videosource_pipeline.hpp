@@ -133,8 +133,6 @@ namespace video_source
 			}
 
 			create_add_element( root_bin, elements, "ffmpegcolorspace", "ffmpegcs" );
-			create_add_element( root_bin, elements, "TIPrepEncBuf", "dspbuf" );
-			create_add_element( root_bin, elements, "queue", "dspqueue" );
 			create_add_element( root_bin, elements, "TIVidenc1", "dspenc" );
 			create_add_element( root_bin, elements, "queue", "queue0" );
 			create_add_element( root_bin, elements, "queue", "queue1" );
@@ -176,16 +174,6 @@ namespace video_source
 				, "rateControlPreset", opts_map["dsp-encoder.rateControlPreset"].as<int>()
 				, NULL );
 
-			g_object_set( G_OBJECT( elements["dspbuf"] )
-				, "contiguousInputFrame", opts_map["dsp-encoder.contiguousInputFrame"].as<bool>()
-				, "numOutputBufs", opts_map["dsp-encoder.numOutputBufs"].as<int>()
-				, NULL );
-
-			g_object_set( G_OBJECT( elements["dspqueue"] )
-				, "max-size-buffers", opts_map["dsp-encoder.max-size-buffers"].as<int>()
-				, "max-size-bytes", opts_map["dsp-encoder.max-size-bytes"].as<int>()
-				, NULL );
-
 			g_object_set( G_OBJECT( elements["clockoverlay"] )
 				, "halignment", opts_map["clockoverlay.halignment"].as<int>()
 				, "valignment", opts_map["clockoverlay.valignment"].as<int>()
@@ -196,29 +184,90 @@ namespace video_source
 
 			insert_video_filter( elements["videosrc"], elements["ffmpegcs"], opts_map );
 
+			if( opts_map["dsp-encoder.use-TIPrepEncBuf"].as<bool>() )
+			{
+				create_add_element( root_bin, elements, "queue", "dspqueue" );
+				create_add_element( root_bin, elements, "TIPrepEncBuf", "dspbuf" );
+
+				g_object_set( G_OBJECT( elements["dspbuf"] )
+					, "contiguousInputFrame", opts_map["dsp-encoder.contiguousInputFrame"].as<bool>()
+					, "numOutputBufs", opts_map["dsp-encoder.numOutputBufs"].as<int>()
+					, NULL );
+
+				g_object_set( G_OBJECT( elements["dspqueue"] )
+					, "max-size-buffers", opts_map["dsp-encoder.max-size-buffers"].as<int>()
+					, "max-size-bytes", opts_map["dsp-encoder.max-size-bytes"].as<int>()
+					, NULL );
+
+				if( !gst_element_link_many( elements["ffmpegcs"], elements["clockoverlay"], elements["dspbuf"]
+				        , elements["dspqueue"], elements["dspenc"], elements["queue0"], elements["mux"]
+				        , elements["queue1"], elements["networksink"], NULL ) )
+				{
+					LOG_CLOG( log_error ) << "Failed to link elements.";
+					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+				}
+			}
+			else
+			{
+				if( !gst_element_link_many( elements["ffmpegcs"], elements["clockoverlay"], elements["dspenc"]
+				        , elements["queue0"], elements["mux"], elements["queue1"], elements["networksink"], NULL ) )
+				{
+					LOG_CLOG( log_error ) << "Failed to link elements.";
+					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+				}
+			}
+
+			if( opts_map["videosource.use-videorate"].as<bool>() )
+			{
+				create_add_element( root_bin, elements, "videorate", "videorate" );
+
+				gst_element_unlink( elements["ffmpegcs"], elements["clockoverlay"] );
+
+				if( !gst_element_link_many( elements["ffmpegcs"], elements["videorate"]
+				        , elements["clockoverlay"], NULL ) )
+				{
+					LOG_CLOG( log_error ) << "Failed to link elements.";
+					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+				}
+			}
+
 			if( opts_map["datarate.enable-watch"].as<bool>() )
 			{
 				if( opts_map["datarate.watch-position"].as<int>() == 1 )
 				{
 					LOG_CLOG( log_info ) << "Registering watch on Camera stream...";
 
-					if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"]
-					        , elements["clockoverlay"], elements["dspbuf"], elements["dspqueue"]
-					        , elements["dspenc"], elements["queue0"], elements["mux"], elements["queue1"]
-					        , elements["networksink"], NULL ) )
+					if( !opts_map["videosource.use-videorate"].as<bool>() )
 					{
-						LOG_CLOG( log_error ) << "Failed to link elements.";
-						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+						gst_element_unlink( elements["ffmpegcs"], elements["clockoverlay"] );
+
+						if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"]
+						        , elements["clockoverlay"], NULL ) )
+						{
+							LOG_CLOG( log_error ) << "Failed to link elements.";
+							BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+						}
+					}
+					else
+					{
+						gst_element_unlink( elements["ffmpegcs"], elements["videorate"] );
+
+						if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"]
+						        , elements["videorate"], NULL ) )
+						{
+							LOG_CLOG( log_error ) << "Failed to link elements.";
+							BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+						}
 					}
 				}
 				else if( opts_map["datarate.watch-position"].as<int>() == 2 )
 				{
 					LOG_CLOG( log_info ) << "Registering watch on DSP video encoder stream...";
 
-					if( !gst_element_link_many( elements["ffmpegcs"], elements["clockoverlay"]
-					        , elements["dspbuf"], elements["dspqueue"], elements["dspenc"], elements["identity"]
-					        , elements["queue0"], elements["mux"], elements["queue1"], elements["networksink"]
-					        , NULL ) )
+					gst_element_unlink( elements["dspenc"], elements["queue0"] );
+
+					if( !gst_element_link_many( elements["dspenc"], elements["identity"]
+					        , elements["queue0"], NULL ) )
 					{
 						LOG_CLOG( log_error ) << "Failed to link elements.";
 						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
@@ -228,10 +277,10 @@ namespace video_source
 				{
 					LOG_CLOG( log_info ) << "Registering watch on MPEG TS stream before queue1...";
 
-					if( !gst_element_link_many( elements["ffmpegcs"], elements["clockoverlay"]
-					        , elements["dspbuf"], elements["dspqueue"], elements["dspenc"], elements["queue0"]
-					        , elements["mux"], elements["identity"], elements["queue1"], elements["networksink"]
-					        , NULL ) )
+					gst_element_unlink( elements["mux"], elements["queue1"] );
+
+					if( !gst_element_link_many( elements["mux"], elements["identity"]
+					        , elements["queue1"], NULL ) )
 					{
 						LOG_CLOG( log_error ) << "Failed to link elements.";
 						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
@@ -241,24 +290,14 @@ namespace video_source
 				{
 					LOG_CLOG( log_info ) << "Registering watch on MPEG TS stream after queue1...";
 
-					if( !gst_element_link_many( elements["ffmpegcs"], elements["clockoverlay"]
-					        , elements["dspbuf"], elements["dspqueue"], elements["dspenc"], elements["queue0"]
-					        , elements["mux"], elements["queue1"], elements["identity"], elements["networksink"]
-					        , NULL ) )
+					gst_element_unlink( elements["queue1"], elements["networksink"] );
+
+					if( !gst_element_link_many( elements["queue1"], elements["identity"]
+					        , elements["networksink"], NULL ) )
 					{
 						LOG_CLOG( log_error ) << "Failed to link elements.";
 						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 					}
-				}
-			}
-			else
-			{
-				if( !gst_element_link_many( elements["ffmpegcs"], elements["clockoverlay"], elements["dspbuf"]
-				        , elements["dspqueue"], elements["dspenc"], elements["queue0"], elements["mux"]
-				        , elements["networksink"], NULL ) )
-				{
-					LOG_CLOG( log_error ) << "Failed to link elements.";
-					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 				}
 			}
 
