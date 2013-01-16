@@ -45,7 +45,7 @@ do
 		frequency=0;
 		;;
 	esac
-	sleepdur=`echo $basedur/$duration| bc -l `
+	sleepdur=`echo "scale=2;$basedur/$duration"| bc  `
 	frequency=`echo $frequency \* 2 ^ \( $register - 4 \) | bc `
 #echo $note $frequency $duration
 			
