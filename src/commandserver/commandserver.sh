@@ -4,6 +4,11 @@
 #### Author: Christos Papachristou (papachristou@novocaptis.com)
 CONFFILE=$1
 BEEPBIN=/usr/bin/beep.sh
+BEEPONCMD="echo -500 > /dev/pwm8 ; echo 50 > /dev/pwm8  ;  "
+BEEPOFFCMD=" echo 0 > /dev/pwm8  ; "
+BEEPSLEEPOFFCMD=" sllep 0.2 ; echo 0 > /dev/pwm8  ; "
+BEEPFREQ=500
+BEEPCMD="$BEEPONCMD $BEEPOFFCMD"
 PIPENAME=/tmp/commandserver.fifo
 PIPEFD=7
 . $CONFFILE
@@ -12,7 +17,7 @@ ECHO=true
 #ECHO=echo
 execcmd()
 {
-	${BEEPBIN} &
+#	${BEEPBIN} &
 	echo $@ | /bin/sh &
 }
 #ECHO=true
@@ -41,9 +46,9 @@ eventhandler()
 #			READLINE=`echo "exec 7<> ${PIPENAME};read -u7 -t1 TIME CODE VAL ;RETVAL=\\$?;echo set TIME=\\$TIME \; CODE=\\$CODE \; VAL=\\$VAL ;return \\$RETVAL" |/bin/sh`
 			READLINE=`echo "exec 7<> ${PIPENAME};read -u7 -t1 LINE;RETVAL=\\$?;echo \\$LINE;exit \\$RETVAL" |/bin/sh`
 			RETVAL=$?
-			TIME=`echo $READLINE | awk '{print $1}'`
 			CODE=`echo $READLINE | awk '{print $2}'`
 			VAL=`echo $READLINE | awk '{print $3}'`
+			TIME=`echo $READLINE | awk '{print $1}'`
 			case $RETVAL in
 				0)
 					[ $CODE = $PWRBTNKEYCODE ] && VAL=`echo $VAL | awk -e '{printf("%d",!$1)}'`
@@ -51,10 +56,15 @@ eventhandler()
 					case ${VAL} in
 					0)
 #						${ECHO} button down
+	#sh -c "$BEEPONCMD"
+#echo 0 > /dev/pwm8
+#	${BEEPBIN}
 						BUTTONPRESSTIME[$CODE]=$TIME
 						BUTTONDOWN[$CODE]=1
 						;;
 					1)
+	#sh -c "$BEEPOFFCMD"
+#echo 0 > /dev/pwm8
 #						${ECHO} button up
 						BUTTONDOWN[$CODE]=0
 						;;
@@ -170,10 +180,15 @@ eventloop()
 		do	
 			EVENT=`echo "$line" | grep "Event: time "|grep -v " ----------"`
 			[ -z "$EVENT" ] && continue
-			TIME=`echo "$EVENT" | sed -e 's/^Event: time \([0-9]*\.[0-9]*\).*/\1/'`
+			echo -$BEEPFREQ > /dev/pwm8
+#			echo 50 > /dev/pwm8 
 			CODE=`echo "$EVENT" | sed -e 's/.*, code \([0-9]*\).*/\1/'`
 			VAL=`echo "$EVENT" | sed -e 's/.*, value \([0-9]*\).*/\1/'`
+		[ "$CODE" -eq "$PWRBTNKEYCODE" ] && [ "$VAL" -eq 1 ] && echo 50 > /dev/pwm8 
+		[ "$CODE" -ne "$PWRBTNKEYCODE" ] && [ "$VAL" -eq 0 ] &&  echo 50 > /dev/pwm8
+			TIME=`echo "$EVENT" | sed -e 's/^Event: time \([0-9]*\.[0-9]*\).*/\1/'`
 			echo $TIME $CODE $VAL > ${PIPENAME}
+			sh -c "$BEEPSLEEPOFFCMD" &
 #		COMMAND=$line
 #			case $COMMAND in
 #				'quit')
