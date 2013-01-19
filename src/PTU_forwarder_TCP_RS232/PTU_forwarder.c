@@ -17,6 +17,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <math.h>
 #include <netinet/in.h>
 #include <net/if.h>
 #include <netdb.h>
@@ -96,27 +97,64 @@ reg_level_info reg_lvls[NO_OF_REGISTERS];
 sampling_timer reg_timers[NO_OF_REGISTERS];
 time_t timestamps[NO_OF_REGISTERS];
 
-char * sensor_type_str[NO_OF_REGISTERS] = { "Temperature", "Humidity", "O2", "CO2", "HeartRate", "DoseAccum", "DoseRate", "BodyTemperature"};
-char * meas_units[NO_OF_REGISTERS] = { "C", "%", "%", "ppm", "bpm", "mSv", "mSv/h", "C"};
-const char * register_params[3] = { SAMPLE_RATE_PARAM_NAME, UP_LVL_PARAM_NAME, DOWN_LVL_PARAM_NAME};
+char * sensor_type_str[NO_OF_REGISTERS] = { "Temperature", "Humidity", "O2", "CO2", "HeartRate", "DoseAccum", "DoseRate", "BodyTemperature", "BarometricPressure", "BatteryLevel"};
+char * meas_units[NO_OF_REGISTERS] = { "C", "%", "%", "ppm", "bpm", "mSv", "mSv/h", "C", "bar", "%"};
+const char * register_params[4] = { SAMPLE_RATE_PARAM_NAME, UP_LVL_PARAM_NAME, DOWN_LVL_PARAM_NAME, VAL_CHANGE_PARAM_NAME};
 const char * program_params[7] = {SERVER_IP_PARAM_NAME, SERVER_PORT_PARAM_NAME, SERIAL_PORT_PARAM_NAME, SERIAL_BAUD_PARAM_NAME, DOS_ID_PARAM_NAME, CO2_EMF1_PARAM_NAME, UNIT_NAME_PARAM_NAME};
-
+char value_change_flag[NO_OF_REGISTERS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+float last_value_change[NO_OF_REGISTERS] = {25, 40, 18, 350, 60, 0.1, 0, 35, 1, 7};
 char * json_msg;
 int tcp_sock, cport, pipe_write, pipe_read;
 struct sockaddr_in server;
 struct addrinfo hints, *res;
+
 void sighandler_fn(int sig)
 {
 	exit(sig);
 }
+
+int check_for_hung_TCP_connection(int secs)
+{
+	fd_set  wfds;
+	struct timeval tv;
+	int retval, max_socket;
+
+	FD_ZERO(&wfds);
+	FD_SET(tcp_sock, &wfds);
+	max_socket=tcp_sock+1;
+	tv.tv_sec = secs;
+	tv.tv_usec = 000000;
+	//test if tcp socket connection would block
+	retval = select(max_socket,  NULL , &wfds , NULL, &tv);
+	if (retval > 0)
+	{
+		//OK, seems alive (TODO : should also try to send and receive ping to be sure), return success
+		return 0;
+	}
+	else
+		if(retval==0)
+		{
+			//TCP connection would block after tv time, return failure
+			#ifdef DEBUG
+			printf("TCP/IP connection timeout\n");
+			#endif
+			return 1;
+		}
+	// some other error occured, maybe should be somehow handled
+	#ifdef DEBUG
+	perror("connection select error:");
+	#endif
+	return -1;
+}
+
 int main (void)
 {
     struct timeb tp1, tp2;
-	fd_set rfds, wfds;
+	fd_set rfds;
 	struct timeval tv;
 	int retval, max_socket;
-	int times = 1, write_efforts = 0;
-	uint8_t regs_bmp;
+	int times = 1;
+	uint16_t regs_bmp;
 	int pipe_n;
 
 	signal(SIGINT,sighandler_fn);
@@ -124,12 +162,12 @@ int main (void)
 	init();
     write_conf_settings();
 
-	#ifdef PIPES_WR
-	pipe_write = open(PIPE_WRITE, O_RDWR);
-	#endif
-
 	#ifdef PIPES_RD
 	pipe_read = open(PIPE_READ, O_RDWR);
+	#endif
+
+	#ifdef PIPES_WR
+	pipe_write = open(PIPE_WRITE, O_RDWR);
 	#endif
 
 	while(1)
@@ -157,14 +195,6 @@ int main (void)
 		FD_SET(pipe_read, &rfds);
 		#endif
 
-		FD_ZERO(&wfds);
-		#ifdef TCP_CONN
-		FD_SET(tcp_sock, &wfds);
-		#endif
-		#ifdef PIPES_WR
-		FD_SET(pipe_write, &wfds);
-		#endif
-
 		max_socket = -1;
 
 		#ifdef SERIAL
@@ -182,9 +212,9 @@ int main (void)
 		max_socket += 1;
 
 		tv.tv_sec = 0;
-		tv.tv_usec = 0;
+		tv.tv_usec = 10000;
 
-		retval = select(max_socket, &rfds, &wfds, NULL, &tv);
+		retval = select(max_socket, &rfds, NULL, NULL, &tv);
 		if (retval > 0)
 		{
 			#ifdef SERIAL
@@ -210,52 +240,40 @@ int main (void)
 				}
 			}
 			#endif
-			#ifdef PIPES_WR
-			if( FD_ISSET(pipe_write, &wfds) )
-			{
-				if (new_pipe_wr)
-				{
-					if (write(pipe_write, pipe_wr_buf, strlen(pipe_wr_buf)) < 0)
-					{
-						perror("Error writing to pipe:");
-					}
-					new_pipe_wr = 0;
-				}
-			}
-			#endif
+
 			#ifdef TCP_CONN
 			if( FD_ISSET(tcp_sock, &rfds) && handle_msg_from_server() != 1)
 			{
 				init_tcp_conn();
 				continue;
 			}
-			if( !FD_ISSET(tcp_sock, &wfds) )
-			{
-				if(write_efforts++ > 5)
-				{
-					write_efforts = 0;
-					init_tcp_conn();
-				}
-				continue;
-			}
 			#endif
 		}
 		else if (retval == 0) //timeout
 		{
-			#ifdef TCP_CONN
-			if(write_efforts++ > 5)
-			{
-				write_efforts = 0;
-				init_tcp_conn();
-			}
-			continue;
-			#endif
 		}
-		else
+		else if (errno != EINTR)
 		{
 			perror("Error select:");
 			exit(retval);
 		}
+
+		if (new_pipe_wr)
+		{
+			if (write(pipe_write, pipe_wr_buf, strlen(pipe_wr_buf)) < 0)
+			{
+				perror("Error writing to pipe:");
+			}
+			new_pipe_wr = 0;
+		}
+
+		if(check_for_hung_TCP_connection(5))
+				{
+					//TCP connection would block after 5 secs, reinit
+					//TODO : Does this work cleanly or just exit?
+					init_tcp_conn();
+		//
+				}
 
 		times++;
 		regs_bmp = expired_timers();
@@ -550,10 +568,10 @@ void update_timers(uint32_t ellapsed)
  * Finds out which reg timers have expired and returns the result in
  * a bitmap, e.g. 00000101(bin) -> timers 1 and 3 have expired
  */
-uint8_t expired_timers()
+uint16_t expired_timers()
 {
 	int i;
-	uint8_t bitmap = 0;
+	uint16_t bitmap = 0;
 	
 	for(i = 0; i < NO_OF_REGISTERS; i++)
 	{
@@ -653,7 +671,8 @@ int read_conf_settings()
 		}
 		if(fscanf(conf_file, SAMPLE_RATE_CONF_LINE, &reg_timers[cur_reg].period) != 1 ||
 				fscanf(conf_file, UP_LVL_CONF_LINE, &reg_lvls[cur_reg].up_thres) != 1 ||
-				fscanf(conf_file, DOWN_LVL_CONF_LINE, &reg_lvls[cur_reg].down_thres) != 1)
+				fscanf(conf_file, DOWN_LVL_CONF_LINE, &reg_lvls[cur_reg].down_thres) != 1 ||
+				fscanf(conf_file, VAL_CHANGE_CONF_LINE, &reg_lvls[cur_reg].val_change_thres) != 1)
 		{
 			#ifdef ERROR_VERB
 			perror("Error reading config file - sensor parameters:");
@@ -708,7 +727,8 @@ int write_conf_settings()
 		if( (sum +=fprintf(conf_file, SENSOR_REG_TYPE_LINE, sensor_type_str[cur_reg])) <= 0 ||
 			(sum +=fprintf(conf_file, SAMPLE_RATE_CONF_LINE, reg_timers[cur_reg].period)) <= 0 ||
 			(sum +=fprintf(conf_file, UP_LVL_CONF_LINE, reg_lvls[cur_reg].up_thres)) <= 0 ||
-			(sum +=fprintf(conf_file, DOWN_LVL_CONF_LINE, reg_lvls[cur_reg].down_thres)) <= 0)
+			(sum +=fprintf(conf_file, DOWN_LVL_CONF_LINE, reg_lvls[cur_reg].down_thres)) <= 0 ||
+			(sum +=fprintf(conf_file, VAL_CHANGE_CONF_LINE, reg_lvls[cur_reg].val_change_thres)) <= 0)
 		{ 
 			#ifdef ERROR_VERB
 			perror("Error writing config file - sensor parameters:");
@@ -848,9 +868,9 @@ int read_meas_register(uint8_t reg, uint8_t num)
  * e.g. regs_bitmap = 00000101 (bin) -> read registers 1 & 3.
  * Returns the bitmap representing the registers that were successfully read.
  */
-uint8_t read_registers(uint8_t regs_bitmap)
+uint16_t read_registers(uint16_t regs_bitmap)
 {
-	uint8_t reg;
+	uint16_t reg;
 	for(reg = 1; reg <= NO_OF_REGISTERS; reg++)
         if(regs_bitmap & (1 << (reg - 1)))
 			#ifdef SERIAL
@@ -863,7 +883,7 @@ uint8_t read_registers(uint8_t regs_bitmap)
  * Forms the JSON message containing the measurements and events for
  * the sensor registers indicated by sensors_bitmap parameter. 
  */
-int meas_to_JSON(uint8_t sensors_bitmap)
+int meas_to_JSON(uint16_t sensors_bitmap)
 {
 	int cur_reg;
 	json_t *entry, *array_elem, *array;
@@ -898,10 +918,14 @@ int meas_to_JSON(uint8_t sensors_bitmap)
 		json_insert_pair_into_object(array_elem, "Method", json_new_string(SAMPLE_MET));
 		sprintf(txt_buf, "%g", meas[cur_reg].val);
 		json_insert_pair_into_object(array_elem, "Value", json_new_string(txt_buf));
-		sprintf(txt_buf, "%g",  (float)reg_timers[cur_reg].period);
-		json_insert_pair_into_object(array_elem, "SamplingRate", json_new_string(txt_buf));
 		meas_unit = meas_units[cur_reg];
 		json_insert_pair_into_object(array_elem, "Unit", json_new_string(meas_unit));
+		sprintf(txt_buf, "%g",  (float)reg_timers[cur_reg].period);
+		json_insert_pair_into_object(array_elem, "SamplingRate", json_new_string(txt_buf));
+		sprintf(txt_buf, "%g", reg_lvls[cur_reg].up_thres);
+		json_insert_pair_into_object(array_elem, "UpThreshold", json_new_string(txt_buf));
+		sprintf(txt_buf, "%g", reg_lvls[cur_reg].down_thres);
+		json_insert_pair_into_object(array_elem, "DownThreshold", json_new_string(txt_buf));
 		
 		json_insert_child(array, array_elem);
 	}
@@ -934,10 +958,38 @@ int meas_to_JSON(uint8_t sensors_bitmap)
 			new_pipe_wr = 1;
 			#endif
 		}
+		else if (value_change_flag[cur_reg])
+		{
+			value_change_flag[cur_reg] = 0;
+
+			#ifdef PIPES_WR
+			sprintf(pipe_wr_buf, "Event3_ValueChange_%s", sensor_type_str[cur_reg ]);
+			new_pipe_wr = 1;
+			#endif
+
+			array_elem = json_new_object();
+			json_insert_pair_into_object(array_elem, "Type", json_new_string("Event"));
+			sensor = sensor_type_str[cur_reg];
+			json_insert_pair_into_object(array_elem, "Sensor", json_new_string(sensor));
+			json_insert_pair_into_object(array_elem, "EventType", json_new_string("ValueChange"));
+			timeinfo = localtime ( &timestamps[cur_reg] );
+			sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d", timeinfo->tm_mday, (timeinfo->tm_mon+1), (timeinfo->tm_year+1900), timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+			json_insert_pair_into_object(array_elem, "Time", json_new_string(txt_buf));
+			sprintf(txt_buf, "%g", meas[cur_reg].val);
+			json_insert_pair_into_object(array_elem, "Value", json_new_string(txt_buf));
+			meas_unit = meas_units[cur_reg];
+			json_insert_pair_into_object(array_elem, "Unit", json_new_string(meas_unit));
+			sprintf(txt_buf, "%g", reg_lvls[cur_reg].val_change_thres);
+			json_insert_pair_into_object(array_elem, "Threshold", json_new_string(txt_buf));
+			json_insert_child(array, array_elem);
+
+			continue;
+		}
 		else
 		{
 			continue;
 		}
+
 		array_elem = json_new_object();
 		json_insert_pair_into_object(array_elem, "Type", json_new_string("Event"));
 		sensor = sensor_type_str[cur_reg];
@@ -948,6 +1000,8 @@ int meas_to_JSON(uint8_t sensors_bitmap)
 		json_insert_pair_into_object(array_elem, "Time", json_new_string(txt_buf));
 		sprintf(txt_buf, "%g", meas[cur_reg].val);
 		json_insert_pair_into_object(array_elem, "Value", json_new_string(txt_buf));
+		meas_unit = meas_units[cur_reg];
+		json_insert_pair_into_object(array_elem, "Unit", json_new_string(meas_unit));
 		sprintf(txt_buf, "%g", thres);
 		json_insert_pair_into_object(array_elem, "Threshold", json_new_string(txt_buf));
 		json_insert_child(array, array_elem);
@@ -1331,6 +1385,13 @@ int parse_json_msg()
 										ret = sscanf(cursor->child->text, "%f",&value);
 										if (ret == 1 ) reg_lvls[i].down_thres = value;
 									}
+									//Write value change threshold
+									else if( !strcmp(cursor->child->text, register_params[3]) )
+									{
+										if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
+										ret = sscanf(cursor->child->text, "%f",&value);
+										if (ret == 1 ) reg_lvls[i].val_change_thres = value;
+									}
 								}
 							}
 						}
@@ -1518,8 +1579,11 @@ void handle_modbus_pkg()
 	int i, j, n, jason_len;
 	char print_buf[50];
 	char * dos_status;
-	uint8_t bitmap, json_flag;
-	uint16_t bmp_addr;
+	uint8_t json_flag;
+	uint16_t bitmap, bmp_addr;
+	time_t local_time_secs;
+	struct tm * timeinfo_debug;
+	char txt_buf[20];
 
 	modbus_reg_t registers[NO_OF_REGISTERS];
 
@@ -1548,7 +1612,7 @@ void handle_modbus_pkg()
 		json_flag = 0;
 		for (j=0;j<modbus_pkg.register_num;j++) //calculate bitmap
 		{
-			if (registers[j].register_id == 0x09)//fall detection alert
+			if (registers[j].register_id == 0x14)//fall detection alert
 			{
 				//send fall detection event
 				#ifdef TCP_CONN
@@ -1564,7 +1628,12 @@ void handle_modbus_pkg()
 				else
 				{
 					#ifdef DEBUG
-					printf("Debug: JSON FallDetection transmitted.\n");
+					local_time_secs = time(NULL);
+					timeinfo_debug = localtime ( &local_time_secs );
+					sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d",
+					timeinfo_debug->tm_mday, (timeinfo_debug->tm_mon+1), (timeinfo_debug->tm_year+1900),
+					timeinfo_debug->tm_hour, timeinfo_debug->tm_min, timeinfo_debug->tm_sec);
+					printf("%s - Debug: JSON FallDetection transmitted.\n", txt_buf);
 					#endif
 				}
 				if (json_msg != NULL) free(json_msg);
@@ -1574,7 +1643,7 @@ void handle_modbus_pkg()
 				new_pipe_wr = 1;
 				#endif
 			}
-			else if (registers[j].register_id == 0x0A)//dose rate alert
+			else if (registers[j].register_id == 0x15)//dose rate alert
 			{
 				#ifdef TCP_CONN
 				jason_len = alert_to_JSON("DoseRateAlert", "DoseRate");
@@ -1599,7 +1668,7 @@ void handle_modbus_pkg()
 				new_pipe_wr = 1;
 				#endif
 			}
-			else if (registers[j].register_id == 0x0B)//dosimeter connection status change
+			else if (registers[j].register_id == 0x16)//dosimeter connection status change
 			{
 				if (registers[j].value.val_int32 == 1)
 				{
@@ -1623,7 +1692,12 @@ void handle_modbus_pkg()
 				else
 				{
 					#ifdef DEBUG
-					printf("Debug: JSON DoseConnection transmitted.\n");
+					local_time_secs = time(NULL);
+					timeinfo_debug = localtime ( &local_time_secs );
+					sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d",
+					timeinfo_debug->tm_mday, (timeinfo_debug->tm_mon+1), (timeinfo_debug->tm_year+1900),
+					timeinfo_debug->tm_hour, timeinfo_debug->tm_min, timeinfo_debug->tm_sec);
+					printf("%s - Debug: JSON DoseConnection transmitted.\n", txt_buf);
 					#endif
 				}
 				if (json_msg != NULL) free(json_msg);
@@ -1637,6 +1711,11 @@ void handle_modbus_pkg()
 			{
 				json_flag = 1;
 				n= registers[j].register_id-1;
+				if (fabsf(registers[j].value.val - last_value_change[n]) >= reg_lvls[n].val_change_thres)
+				{
+					last_value_change[n] = registers[j].value.val;
+					value_change_flag[n] = 1;
+				}
 				meas[n].val_int32 = registers[j].value.val_int32;
 				if( meas[n].val >= reg_lvls[n].up_thres && reg_lvls[n].lvl != UP_LVL)
 				{
@@ -1676,7 +1755,12 @@ void handle_modbus_pkg()
 			else
 			{
 				#ifdef DEBUG
-				printf("Debug: JSON New Values transmitted, %s, frame_id:%d\n",unit,frame_id);
+				local_time_secs = time(NULL);
+				timeinfo_debug = localtime ( &local_time_secs );
+				sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d",
+				timeinfo_debug->tm_mday, (timeinfo_debug->tm_mon+1), (timeinfo_debug->tm_year+1900),
+				timeinfo_debug->tm_hour, timeinfo_debug->tm_min, timeinfo_debug->tm_sec);
+				printf("%s - Debug: JSON New Values transmitted, %s, frame_id:%d\n",txt_buf,unit,frame_id);
 				#endif
 			}
 			if (json_msg != NULL) free(json_msg);
