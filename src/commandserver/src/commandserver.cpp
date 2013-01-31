@@ -21,6 +21,7 @@
 
 #include <boost/program_options.hpp>
 #include "log.hpp"
+#include "event.h"
 
 using namespace auxiliary_libraries;
 
@@ -33,6 +34,8 @@ auxiliary_libraries::log_level global_log_level = log_debug_2;
 int
 main( int argc, char* argv[] )
 {
+//	maind(argc,argv);
+//	exit(0);
 	try
 	{
 		namespace app_opts = boost::program_options;

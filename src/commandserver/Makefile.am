@@ -22,7 +22,7 @@ bin_PROGRAMS = commandserver
 ## the C++ compiler to produce an object file (.o) from each source file. The
 ## header files (.h) do not result in object files by themselves, but will be
 ## included in distribution archives of the project.
-commandserver_SOURCES = src/commandserver.cpp src/log.hpp
+commandserver_SOURCES = src/commandserver.cpp src/event.c src/log.hpp src/event.h src/commandserver.hpp
 
 commandserver_LDADD = $(DEPS_LIBS)
 
