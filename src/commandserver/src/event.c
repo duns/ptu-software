@@ -34,6 +34,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
+#include "event.h"
 
 #ifndef EV_SYN
 #define EV_SYN 0
@@ -296,7 +297,7 @@ char **names[EV_MAX + 1] = {
 #define LONG(x) ((x)/BITS_PER_LONG)
 #define test_bit(bit, array)	((array[LONG(bit)] >> OFF(bit)) & 1)
 
-int maind (int argc, char **argv)
+int event_loop (char *device, int pipefd)
 {
 	int fd, rd, i, j, k;
 	struct input_event ev[64];
@@ -306,13 +307,8 @@ int maind (int argc, char **argv)
 	char name[256] = "Unknown";
 	int abs[5];
 
-	if (argc < 2) {
-		printf("Usage: evtest /dev/input/eventX\n");
-		printf("Where X = input device number\n");
-		return 1;
-	}
 
-	if ((fd = open(argv[argc - 1], O_RDONLY)) < 0) {
+	if ((fd = open(device, O_RDONLY)) < 0) {
 		perror("evtest");
 		return 1;
 	}
@@ -326,8 +322,8 @@ int maind (int argc, char **argv)
 		version >> 16, (version >> 8) & 0xff, version & 0xff);
 
 	ioctl(fd, EVIOCGID, id);
-	printf("Input device ID: bus 0x%x vendor 0x%x product 0x%x version 0x%x\n",
-		id[ID_BUS], id[ID_VENDOR], id[ID_PRODUCT], id[ID_VERSION]);
+	printf("Input device %s ID: bus 0x%x vendor 0x%x product 0x%x version 0x%x\n",
+		device , id[ID_BUS], id[ID_VENDOR], id[ID_PRODUCT], id[ID_VERSION]);
 
 	ioctl(fd, EVIOCGNAME(sizeof(name)), name);
 	printf("Input device name: \"%s\"\n", name);
@@ -368,9 +364,14 @@ int maind (int argc, char **argv)
 		for (i = 0; i < rd / sizeof(struct input_event); i++)
 
 			if (ev[i].type == EV_SYN) {
-				printf("Event: time %ld.%06ld, -------------- %s ------------\n",
-					ev[i].time.tv_sec, ev[i].time.tv_usec, ev[i].code ? "Config Sync" : "Report Sync" );
-			} else if (ev[i].type == EV_MSC && (ev[i].code == MSC_RAW || ev[i].code == MSC_SCAN)) {
+//				printf("Event: time %ld.%06ld, -------------- %s ------------\n",
+//					ev[i].time.tv_sec, ev[i].time.tv_usec, ev[i].code ? "Config Sync" : "Report Sync" );
+			} else 
+		{
+			write(pipefd,&ev[i],sizeof(struct input_event));
+			/*
+				
+				if (ev[i].type == EV_MSC && (ev[i].code == MSC_RAW || ev[i].code == MSC_SCAN)) {
 				printf("Event: time %ld.%06ld, type %d (%s), code %d (%s), value %02x\n",
 					ev[i].time.tv_sec, ev[i].time.tv_usec, ev[i].type,
 					events[ev[i].type] ? events[ev[i].type] : "?",
@@ -385,6 +386,8 @@ int maind (int argc, char **argv)
 					names[ev[i].type] ? (names[ev[i].type][ev[i].code] ? names[ev[i].type][ev[i].code] : "?") : "?",
 					ev[i].value);
 			}	
+			*/
+		}
 
 	}
 }
