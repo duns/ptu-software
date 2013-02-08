@@ -43,10 +43,13 @@ main( int argc, char* argv[] )
 {
 	GMainLoop* loop = g_main_loop_new( NULL, false );
 
-	long buffers_passed = -1
-	   , buffers_size = 0;
+	long buffers_passed = 0
+		, buffers_size = 0;
 
-	boost::mutex mutex;
+	boost::mutex l1_mutex
+		, l2_mutex;
+
+	bool l1_guard = false;
 
 	if( !loop )
 	{
@@ -112,9 +115,7 @@ main( int argc, char* argv[] )
 			( "audiofilter.rate"                , app_opts::value<int>()         , "" )
 			( "audiofilter.channels"            , app_opts::value<int>()         , "" )
 			( "audiofilter.depth"               , app_opts::value<int>()         , "" )
-			( "datarate.enable-watch"           , app_opts::value<bool>()        , "" )
 			( "datarate.watch-position"         , app_opts::value<int>()         , "" )
-			( "datarate.flag-location"          , app_opts::value<std::string>() , "" )
 			( "datarate.min-threshold"          , app_opts::value<int>()         , "" )
 			( "v4l2source.always-copy"          , app_opts::value<bool>()        , "" )
 			( "v4l2source.device"        	    , app_opts::value<std::string>() , "" )
@@ -176,6 +177,13 @@ main( int argc, char* argv[] )
 		global_log_level = static_cast<auxiliary_libraries::log_level>(
 			opts_map["execution.messages-detail"].as<int>() );
 
+		LOG_CLOG( log_info ) << "Initializing level 2 watchdog...";
+
+		auto l2_watch_cfg = boost::bind( l2_watch_loop, &l1_guard, &l2_mutex
+				, opts_map["execution.watchdog-awareness"].as<int>() );
+
+		boost::thread l2_watch_thread( l2_watch_cfg );
+
 		LOG_CLOG( log_info ) << "Initializing Gstreamer...";
 
 		gst_init( &argc, &argv );
@@ -190,49 +198,36 @@ main( int argc, char* argv[] )
 
 		LOG_CLOG( log_info ) << "Registering callbacks...";
 
+		dt_params d_params = boost::make_tuple( &l1_mutex, &buffers_passed, &buffers_size, loop );
+
 		{
 			gstbus_pt pipe_bus( gst_pipeline_get_bus( GST_PIPELINE( videosource.root_bin.get() ) )
-				, cust_deleter<GstBus>() );
+					, cust_deleter<GstBus>() );
 
-			gst_bus_add_watch( pipe_bus.get(), pipeline_bus_handler, loop );
+			gst_bus_add_watch( pipe_bus.get(), pipeline_bus_handler, static_cast<gpointer>( &d_params ) );
 		}
 
-		if( opts_map["datarate.enable-watch"].as<bool>() )
-		{
-			dt_params d_params = boost::make_tuple( &mutex, &buffers_passed, &buffers_size );
-
-			g_signal_connect( videosource.elements["identity"], "handoff", G_CALLBACK( identity_handler )
+		g_signal_connect( videosource.elements["identity"], "handoff", G_CALLBACK( identity_handler )
 					, static_cast<gpointer>( &d_params ) );
 
-			LOG_CLOG( log_info ) << "Initializing watchdog...";
+		LOG_CLOG( log_info ) << "Initializing level 1 watchdog...";
 
-			auto watch_cfg = boost::bind( watch_loop, &videosource, &mutex, &buffers_passed, &buffers_size
+		auto l1_watch_cfg = boost::bind( l1_watch_loop, &videosource, &l1_mutex, &buffers_passed, &buffers_size
 					, opts_map["datarate.min-threshold"].as<int>()
 					, opts_map["execution.watchdog-awareness"].as<int>()
-					, opts_map["datarate.flag-location"].as<std::string>() );
+					, &l1_guard, &l2_mutex );
 
-			boost::thread watch_thread( watch_cfg );
+		boost::thread l1_watch_thread( l1_watch_cfg );
 
-			LOG_CLOG( log_info ) << "Starting pipeline...";
+		LOG_CLOG( log_info ) << "Starting pipeline...";
 
-			gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_PLAYING );
-			g_main_loop_run( loop );
+		gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_PLAYING );
 
-			LOG_CLOG( log_info ) << "Destroying pipeline...";
+		g_main_loop_run( loop );
 
-			gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_NULL );
-		}
-		else
-		{
-			LOG_CLOG( log_info ) << "Starting pipeline...";
+		LOG_CLOG( log_info ) << "Destroying pipeline...";
 
-			gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_PLAYING );
-			g_main_loop_run( loop );
-
-			LOG_CLOG( log_info ) << "Destroying pipeline...";
-
-			gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_NULL );
-		}
+		gst_element_set_state( GST_ELEMENT( videosource.root_bin.get() ), GST_STATE_NULL );
 	}
 	catch( const boost::exception& e )
 	{
