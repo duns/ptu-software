@@ -28,9 +28,4 @@ while true
 do
 	echo `date +"%H:%M:%S.%N"` " - Raising Source" >> ${LOGFILENAME}
 	videosource --config-path=/etc/videosource/vsource.conf 2>> ${LOGFILENAME} 
-	
-	if [ -f /var/run/vs.flag ];
-	then
-		stop_execution	
-	fi
 done
