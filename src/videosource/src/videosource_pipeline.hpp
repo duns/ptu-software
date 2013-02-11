@@ -138,12 +138,7 @@ namespace video_source
 			create_add_element( root_bin, elements, "queue", "queue1" );
 			create_add_element( root_bin, elements, "clockoverlay", "clockoverlay" );
 			create_add_element( root_bin, elements, "mpegtsmux", "mux" );
-
-			if( opts_map["datarate.enable-watch"].as<bool>() )
-			{
-				create_add_element( root_bin, elements, "identity", "identity" );
-			}
-
+			create_add_element( root_bin, elements, "identity", "identity" );
 			create_add_element( root_bin, elements, "tcpclientsink", "networksink" );
 
 			g_object_set( G_OBJECT( elements["networksink"] )
@@ -231,73 +226,70 @@ namespace video_source
 				}
 			}
 
-			if( opts_map["datarate.enable-watch"].as<bool>() )
+			if( opts_map["datarate.watch-position"].as<int>() == 1 )
 			{
-				if( opts_map["datarate.watch-position"].as<int>() == 1 )
+				LOG_CLOG( log_info ) << "Registering watch on Camera stream...";
+
+				if( !opts_map["videosource.use-videorate"].as<bool>() )
 				{
-					LOG_CLOG( log_info ) << "Registering watch on Camera stream...";
+					gst_element_unlink( elements["ffmpegcs"], elements["clockoverlay"] );
 
-					if( !opts_map["videosource.use-videorate"].as<bool>() )
-					{
-						gst_element_unlink( elements["ffmpegcs"], elements["clockoverlay"] );
-
-						if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"]
-						        , elements["clockoverlay"], NULL ) )
-						{
-							LOG_CLOG( log_error ) << "Failed to link elements.";
-							BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
-						}
-					}
-					else
-					{
-						gst_element_unlink( elements["ffmpegcs"], elements["videorate"] );
-
-						if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"]
-						        , elements["videorate"], NULL ) )
-						{
-							LOG_CLOG( log_error ) << "Failed to link elements.";
-							BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
-						}
-					}
-				}
-				else if( opts_map["datarate.watch-position"].as<int>() == 2 )
-				{
-					LOG_CLOG( log_info ) << "Registering watch on DSP video encoder stream...";
-
-					gst_element_unlink( elements["dspenc"], elements["queue0"] );
-
-					if( !gst_element_link_many( elements["dspenc"], elements["identity"]
-					        , elements["queue0"], NULL ) )
+					if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"]
+					        , elements["clockoverlay"], NULL ) )
 					{
 						LOG_CLOG( log_error ) << "Failed to link elements.";
 						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 					}
 				}
-				else if( opts_map["datarate.watch-position"].as<int>() == 3 )
+				else
 				{
-					LOG_CLOG( log_info ) << "Registering watch on MPEG TS stream before queue1...";
+					gst_element_unlink( elements["ffmpegcs"], elements["videorate"] );
 
-					gst_element_unlink( elements["mux"], elements["queue1"] );
-
-					if( !gst_element_link_many( elements["mux"], elements["identity"]
-					        , elements["queue1"], NULL ) )
+					if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"]
+					        , elements["videorate"], NULL ) )
 					{
 						LOG_CLOG( log_error ) << "Failed to link elements.";
 						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 					}
 				}
-				else if( opts_map["datarate.watch-position"].as<int>() == 4 )
+			}
+			else if( opts_map["datarate.watch-position"].as<int>() == 2 )
+			{
+				LOG_CLOG( log_info ) << "Registering watch on DSP video encoder stream...";
+
+				gst_element_unlink( elements["dspenc"], elements["queue0"] );
+
+				if( !gst_element_link_many( elements["dspenc"], elements["identity"]
+				        , elements["queue0"], NULL ) )
 				{
-					LOG_CLOG( log_info ) << "Registering watch on MPEG TS stream after queue1...";
+					LOG_CLOG( log_error ) << "Failed to link elements.";
+					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+				}
+			}
+			else if( opts_map["datarate.watch-position"].as<int>() == 3 )
+			{
+				LOG_CLOG( log_info ) << "Registering watch on MPEG TS stream before queue1...";
 
-					gst_element_unlink( elements["queue1"], elements["networksink"] );
+				gst_element_unlink( elements["mux"], elements["queue1"] );
 
-					if( !gst_element_link_many( elements["queue1"], elements["identity"]
-					        , elements["networksink"], NULL ) )
-					{
-						LOG_CLOG( log_error ) << "Failed to link elements.";
-						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
-					}
+				if( !gst_element_link_many( elements["mux"], elements["identity"]
+				        , elements["queue1"], NULL ) )
+				{
+					LOG_CLOG( log_error ) << "Failed to link elements.";
+					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
+				}
+			}
+			else if( opts_map["datarate.watch-position"].as<int>() == 4 )
+			{
+				LOG_CLOG( log_info ) << "Registering watch on MPEG TS stream after queue1...";
+
+				gst_element_unlink( elements["queue1"], elements["networksink"] );
+
+				if( !gst_element_link_many( elements["queue1"], elements["identity"]
+				        , elements["networksink"], NULL ) )
+				{
+					LOG_CLOG( log_error ) << "Failed to link elements.";
+					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 				}
 			}
 

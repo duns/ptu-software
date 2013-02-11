@@ -28,6 +28,10 @@
 #include <boost/thread.hpp>
 #include <boost/tuple/tuple.hpp>
 
+#define WATCHDOG_INIT_SLEEP 3000
+#define SIGTERM_RETRIES 4
+#define PIPELINE_TERM_RETRIES 5
+
 namespace video_source
 {
 	using namespace auxiliary_libraries;
@@ -37,7 +41,7 @@ namespace video_source
 	 * @ingroup video_source
 	 * @brief Custom identity handler argument type
 	 **/
-	typedef boost::tuple<boost::mutex*, long*, long*> dt_params;
+	typedef boost::tuple<boost::mutex*, long*, long*, GMainLoop*> dt_params;
 
 	/**
 	 * @ingroup video_source
@@ -62,8 +66,6 @@ namespace video_source
 
 		*m_data->get<1>() += 1;
 		*m_data->get<2>() += buffer->size;
-
-		if( *m_data->get<1>() == 0 ) *m_data->get<1>() += 1;
 	}
 
 	/**
@@ -86,8 +88,10 @@ namespace video_source
 	static gboolean
 	pipeline_bus_handler( GstBus* bus, GstMessage* msg, gpointer data )
 	{
+		dt_params* m_data = static_cast<dt_params*>( data );
+		boost::lock_guard<boost::mutex> lock( *m_data->get<0>() );
 		std::string err_msg;
-		GMainLoop* loop = static_cast<GMainLoop*>( data );
+		GMainLoop* loop = m_data->get<3>();
 
 		switch( GST_MESSAGE_TYPE( msg ) )
 		{
@@ -131,46 +135,52 @@ namespace video_source
 
 	/**
  	 * @ingroup video_source
-	 * @brief Watch-dog thread loop
+	 * @brief Level 1 watch-dog thread loop
 	 *
-	 * The watch-dog thread periodically tests the data traffic accumulator. In case it finds out that the
-	 * traffic is low (by comparing it against the provided threshold) it signals the pipeline to destroy itself.
-	 *
-	 * @sa <a href="gstreamer.freedesktop.org/data/doc/gstreamer/head/gstreamer-plugins/html/gstreamer
--plugins-input-selector.html">Gstreamer input-selector element</a>
+	 * The level 1 watch-dog thread periodically tests the data traffic accumulator. In case it finds out that
+	 * the traffic is low (by comparing it against the provided threshold) it signals the pipeline to destroy
+	 * itself.
 	 *
 	 * @param pipeline a pointer to the video streaming pipeline
-	 * @param mutex a pointer to a mutex provided by the executing pipeline
+	 * @param l1_mutex a pointer to the level 1 mutex provided by the mother process
 	 * @param buffers_passed a reference to the traffic counter
 	 * @param buffers_size a reference to the traffic's size accumulator
 	 * @param rate_min_thres the threshold (in number of buffers) under which the traffic is considered low
 	 * @param qos_milli_time sleeping time between two consecutive iterations
-	 * @param flag_path the flag file that the watch-dog sets in case of low traffic to inform the rest of the
-	 * system
+	 * @param l1_guard level 1 boolean guard flag to set to false by running process
+	 * @param l2_mutex a pointer to the level 2 mutex provided by the mother process for mutating the guard
 	 */
 	static void
-	watch_loop( videosource_pipeline* pipeline, boost::mutex* mutex, long* buffers_passed, long* buffers_size
-			, int rate_min_thres, int qos_milli_time, const std::string& flag_path )
+	l1_watch_loop( videosource_pipeline* pipeline, boost::mutex* l1_mutex, long* buffers_passed, long* buffers_size
+			, int rate_min_thres, int qos_milli_time, bool* l1_guard, boost::mutex* l2_mutex )
 	{
+		boost::this_thread::sleep( boost::posix_time::milliseconds( WATCHDOG_INIT_SLEEP ) );
+		int sig_counter = 0;
+
 		while( true )
 		{
-			boost::this_thread::sleep( boost::posix_time::milliseconds( qos_milli_time ) );
-			boost::lock_guard<boost::mutex> lock( *mutex );
-
-			if( *buffers_passed < 0 ) continue;
-
-			LOG_CLOG( log_debug_2 ) << "Watchdog loop: buffers processed in " << qos_milli_time
-				<< " milliseconds = " << *buffers_passed << " (" << *buffers_size << " bytes)";
-
-			if( *buffers_passed < rate_min_thres )
+			if( sig_counter < PIPELINE_TERM_RETRIES )
 			{
-				LOG_CLOG( log_info ) << "Data rate dropped to unacceptable level, sending kill signal...";
+				boost::lock_guard<boost::mutex> lock( *l2_mutex );
+				*l1_guard = false;
+			}
+			else
+			{
+				break;
+			}
 
-				std::ofstream fout( flag_path.c_str() );
+			boost::this_thread::sleep( boost::posix_time::milliseconds( qos_milli_time ) );
+			boost::lock_guard<boost::mutex> lock( *l1_mutex );
 
-				LOG_FILE( log_error, fout ) << "Data rate low.";
+			if( sig_counter == 0 )
+			{
+				LOG_CLOG( log_debug_2 ) << "L1 watchdog: buffers processed in " << qos_milli_time
+						<< " milliseconds = " << *buffers_passed << " (" << *buffers_size << " bytes)";
+			}
 
-				fout.close();
+			if( *buffers_passed < rate_min_thres || sig_counter > 0 )
+			{
+				LOG_CLOG( log_info ) << "L1 watchdog: Sending kill signal (try: " << sig_counter << ")...";
 
 				GstBus* bus = gst_pipeline_get_bus( GST_PIPELINE( pipeline->root_bin.get() ) );
 				GstMessage* msg_switch = gst_message_new_custom(
@@ -179,14 +189,54 @@ namespace video_source
 				gst_bus_post( bus, msg_switch );
 				gst_object_unref( GST_OBJECT( bus ) );
 
-				*buffers_passed = -1;
-			}
-			else
-			{
-				*buffers_passed = 0;
+				sig_counter++;
 			}
 
-			*buffers_size = 0;
+			*buffers_passed = *buffers_size = 0;
+		}
+	}
+
+	/**
+	 * @ingroup video_source
+	 * @brief Level 2 watch-dog thread loop
+	 *
+	 * The level 2 watch-dog thread periodically tests whether watch-dog level 1 is running properly. It ensures
+	 * that in case a process that locks level 1 mutex hangs (due to some underlying Gstreamer library calls not
+	 * returning), a proper termination signal will be send to the mother process.
+	 *
+	 * @param l1_guard pointer to level 1 guard, if the guard found to be set in two subsequent test then
+	 * something went wrong
+	 * @param l2_mutex pointer to level 2 mutex provided by the mother process for mutating the guard
+	 * @param qos_milli_time level 1 watch-dog sleeping time across iterations
+	 */
+	static void
+	l2_watch_loop( bool* l1_guard, boost::mutex* l2_mutex, int qos_milli_time )
+	{
+		boost::this_thread::sleep( boost::posix_time::milliseconds( WATCHDOG_INIT_SLEEP ) );
+		int sig_counter = 0;
+
+		while( true )
+		{
+			boost::this_thread::sleep( boost::posix_time::milliseconds( qos_milli_time * 5 ) );
+			boost::lock_guard<boost::mutex> lock( *l2_mutex );
+
+			if( *l1_guard )
+			{
+				if( sig_counter < SIGTERM_RETRIES )
+				{
+					LOG_COUT( log_info ) << "L2 watchdog: Sending SIGTERM to " << getpid() << " ...";
+					kill( getpid(), SIGTERM );
+				}
+				else
+				{
+					LOG_COUT( log_info ) << "L2 watchdog: Sending SIGKILL to " << getpid() << " ...";
+					kill( getpid(), SIGKILL );
+				}
+
+				sig_counter++;
+			}
+
+			*l1_guard = true;
 		}
 	}
 }
