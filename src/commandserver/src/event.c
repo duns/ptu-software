@@ -310,12 +310,12 @@ int event_loop (char *device, int pipefd)
 
 	if ((fd = open(device, O_RDONLY)) < 0) {
 		perror("evtest");
-		return 1;
+		exit(1);
 	}
 
 	if (ioctl(fd, EVIOCGVERSION, &version)) {
 		perror("evtest: can't get version");
-		return 1;
+		exit(1);
 	}
 
 	printf("Input driver version is %d.%d.%d\n",
@@ -358,7 +358,7 @@ int event_loop (char *device, int pipefd)
 		if (rd < (int) sizeof(struct input_event)) {
 			printf("yyy\n");
 			perror("\nevtest: error reading");
-			return 1;
+			exit(1);
 		}
 
 		for (i = 0; i < rd / sizeof(struct input_event); i++)
