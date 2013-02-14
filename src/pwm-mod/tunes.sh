@@ -4,9 +4,25 @@ notes="C16 D16 E16 F16 G16 A16 B16 \
 5C16 5D16 5E16 5F16 5G16 5A16 5B16 \
 6C16 6D16 6E16 6F16 6G16 6A16 6B16 \
 7C16 7D16 7E16 7F16 7G16 7A16 7B16 8C16" 
+notes="B16 5Ds16 B16 5Fs16 B16 5Ds16 \
+ 5Ds16 B16 5Fs16 B16 \
+ 5Ds16 B16 5Fs16 B16 \
+ 5Ds16 B16 5Fs16 B16 \
+ 5Ds16 B16 5Fs16 B16 \
+ 5Ds16 B16 5Fs16 B16 \
+ 5Ds16 B16 5Fs16 B16 \
+ 5Ds16 B16 5Fs16 B16 \
+ 5E16 B16 5G16 B16 \
+ 5E16 B16 5G16 B16 \
+ 5E16 B16 5G16 B16 \
+ 5E16 B16 5G16 B16 \
+ 5E16 B16 5G16 B16 \
+ 5E16 B16 5G16 B16 \
+ 5E16 B16 5G16 B16 "
 notes="C16 D16 E16 F16 G16 A16 B16 5C16"
 basedur=2.0
 PWMDEV=/dev/pwm8
+[ -n "$1" ] && notes="$1"
 
 	numnotes=0
 for note in $notes
@@ -21,8 +37,14 @@ do
 	C)
 		frequency=262;
 		;;
+	Cs)
+		frequency=277;
+		;;
 	D)
 		frequency=294;
+		;;
+	Ds)
+		frequency=311;
 		;;
 	E)
 		frequency=330;
@@ -36,8 +58,14 @@ do
 	G)
 		frequency=392;
 		;;
+	Gs)
+		frequency=415;
+		;;
 	A)
 		frequency=440;
+		;;
+	As)
+		frequency=466;
 		;;
 	B)
 		frequency=494;

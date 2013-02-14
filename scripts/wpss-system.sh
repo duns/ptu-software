@@ -26,7 +26,7 @@ case "$1" in
 #		echo heartbeat > ${WPSS_LED_BLUE}/trigger
 		echo none > ${WPSS_LED_BAT}/trigger
 		echo none > ${WPSS_LED_CON}/trigger
-                /usr/bin/tunes.sh
+                /usr/bin/tunes.sh "C16 D16 E16 F16 G16 A16 B16 5C16"
 		echo on >  /sys/bus/usb/devices/usb1/power/control
 		echo on >  /sys/bus/usb/devices/usb2/power/control
 		echo "."
@@ -49,6 +49,7 @@ case "$1" in
 #		echo heartbeat > ${WPSS_LED_BLUE}/trigger
 		echo default-on > ${WPSS_LED_BAT}/trigger
 		echo default-on > ${WPSS_LED_CON}/trigger
+		tunes.sh "5C16 B16 A16 G16 F16 E16 D16 C16"
 
 		;;
 esac
