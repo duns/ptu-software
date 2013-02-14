@@ -236,7 +236,7 @@ main( int argc, char* argv[] )
 	catch( const boost::exception& e )
 	{
 		LOG_CLOG( log_debug_1 ) << boost::diagnostic_information( e );
-		LOG_CLOG( log_error ) << "Fatal error occurred. Exiting...";
+		LOG_CERR( log_error ) << "Fatal error occurred. Exiting...";
 
 		g_main_loop_quit( loop );
 
