@@ -27,10 +27,10 @@
 
 #include <boost/thread.hpp>
 #include <boost/tuple/tuple.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
-#define WATCHDOG_INIT_SLEEP 3000
+#define WATCHDOG_INIT_SLEEP 5000
 #define SIGTERM_RETRIES 4
-#define PIPELINE_TERM_RETRIES 5
 
 namespace video_source
 {
@@ -105,7 +105,7 @@ namespace video_source
 			g_error_free( err );
 			g_free( err_str );
 
-			LOG_CLOG( log_error ) << "'" << msg->src->name << "' threw a: " << GST_MESSAGE_TYPE_NAME( msg );
+			LOG_CERR( log_error ) << "'" << msg->src->name << "' threw a: " << GST_MESSAGE_TYPE_NAME( msg );
 			BOOST_THROW_EXCEPTION( bus_error() << bus_info( err_msg ) );
 		}
 		break;
@@ -143,56 +143,67 @@ namespace video_source
 	 *
 	 * @param pipeline a pointer to the video streaming pipeline
 	 * @param l1_mutex a pointer to the level 1 mutex provided by the mother process
-	 * @param buffers_passed a reference to the traffic counter
-	 * @param buffers_size a reference to the traffic's size accumulator
+	 * @param buffers_info a reference to the vector that holds the data traffic counter and the traffic's 
+	 * size accumulator
 	 * @param rate_min_thres the threshold (in number of buffers) under which the traffic is considered low
-	 * @param qos_milli_time sleeping time between two consecutive iterations
+	 * @param sleep_milli_time sleeping time between two consecutive iterations in msec
 	 * @param l1_guard level 1 boolean guard flag to set to false by running process
 	 * @param l2_mutex a pointer to the level 2 mutex provided by the mother process for mutating the guard
 	 */
 	static void
-	l1_watch_loop( videosource_pipeline* pipeline, boost::mutex* l1_mutex, long* buffers_passed, long* buffers_size
-			, int rate_min_thres, int qos_milli_time, bool* l1_guard, boost::mutex* l2_mutex )
+	l1_watch_loop( videosource_pipeline* pipeline, boost::mutex* l1_mutex, long* buffers_info
+		, const std::string& flag_path, int rate_min_thres, int sleep_milli_time, bool* l1_guard
+		, boost::mutex* l2_mutex )
 	{
 		boost::this_thread::sleep( boost::posix_time::milliseconds( WATCHDOG_INIT_SLEEP ) );
-		int sig_counter = 0;
+		int wflag_counter = 1;
 
 		while( true )
 		{
-			if( sig_counter < PIPELINE_TERM_RETRIES )
 			{
 				boost::lock_guard<boost::mutex> lock( *l2_mutex );
 				*l1_guard = false;
 			}
-			else
-			{
-				break;
-			}
 
-			boost::this_thread::sleep( boost::posix_time::milliseconds( qos_milli_time ) );
+			boost::this_thread::sleep( boost::posix_time::milliseconds( sleep_milli_time ) );
 			boost::lock_guard<boost::mutex> lock( *l1_mutex );
 
-			if( sig_counter == 0 )
+			LOG_CLOG( log_debug_2 ) << "L1 watchdog: buffers processed in " << sleep_milli_time
+				<< " milliseconds = " << buffers_info[0] << " (" << buffers_info[1] << " bytes)";
+
+			if( buffers_info[0] < rate_min_thres )
 			{
-				LOG_CLOG( log_debug_2 ) << "L1 watchdog: buffers processed in " << qos_milli_time
-						<< " milliseconds = " << *buffers_passed << " (" << *buffers_size << " bytes)";
+				std::ofstream fout( flag_path.c_str() );
+
+				if( fout.fail() )
+				{
+					LOG_CERR( log_error ) << "L1 watchdog: Failed to create flag in filesystem.";
+					break;	
+				}
+				else
+				{
+					using namespace boost::posix_time;
+
+					LOG_CLOG( log_info ) << "L1 watchdog: Writing " << flag_path.c_str() << " ...";
+					LOG_FILE( log_error, fout ) << "Data rate dropped below " << rate_min_thres << " packets per " 
+								    << sleep_milli_time << " milliseconds.";
+					LOG_FILE( log_error, fout ) << "Timestamp: "
+						<< to_iso_extended_string( microsec_clock::local_time() );
+					LOG_FILE( log_error, fout ) << "Iterations: " << wflag_counter; 
+						
+				}
+
+				fout.close();
+				
+				wflag_counter++;
+			}
+			else
+			{
+				wflag_counter = 1;
+				remove( flag_path.c_str() );
 			}
 
-			if( *buffers_passed < rate_min_thres || sig_counter > 0 )
-			{
-				LOG_CLOG( log_info ) << "L1 watchdog: Sending kill signal (try: " << sig_counter << ")...";
-
-				GstBus* bus = gst_pipeline_get_bus( GST_PIPELINE( pipeline->root_bin.get() ) );
-				GstMessage* msg_switch = gst_message_new_custom(
-					GST_MESSAGE_ELEMENT, GST_OBJECT( pipeline->elements["identity"] )
-				  , gst_structure_new( "kill_stream", "k", G_TYPE_STRING, "k", NULL ) );
-				gst_bus_post( bus, msg_switch );
-				gst_object_unref( GST_OBJECT( bus ) );
-
-				sig_counter++;
-			}
-
-			*buffers_passed = *buffers_size = 0;
+			buffers_info[0] = buffers_info[1] = 0;
 		}
 	}
 
@@ -207,17 +218,17 @@ namespace video_source
 	 * @param l1_guard pointer to level 1 guard, if the guard found to be set in two subsequent test then
 	 * something went wrong
 	 * @param l2_mutex pointer to level 2 mutex provided by the mother process for mutating the guard
-	 * @param qos_milli_time level 1 watch-dog sleeping time across iterations
+	 * @param sleep_milli_time sleeping time across iterations in msec
 	 */
 	static void
-	l2_watch_loop( bool* l1_guard, boost::mutex* l2_mutex, int qos_milli_time )
+	l2_watch_loop( bool* l1_guard, boost::mutex* l2_mutex, int sleep_milli_time )
 	{
 		boost::this_thread::sleep( boost::posix_time::milliseconds( WATCHDOG_INIT_SLEEP ) );
 		int sig_counter = 0;
 
 		while( true )
 		{
-			boost::this_thread::sleep( boost::posix_time::milliseconds( qos_milli_time * 5 ) );
+			boost::this_thread::sleep( boost::posix_time::milliseconds( sleep_milli_time ) );
 			boost::lock_guard<boost::mutex> lock( *l2_mutex );
 
 			if( *l1_guard )

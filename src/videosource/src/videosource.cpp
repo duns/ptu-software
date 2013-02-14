@@ -43,8 +43,9 @@ main( int argc, char* argv[] )
 {
 	GMainLoop* loop = g_main_loop_new( NULL, false );
 
-	long buffers_passed = 0
-		, buffers_size = 0;
+	long buffers_info[2];
+
+	buffers_info[0] = buffers_info[1] = 0;
 
 	boost::mutex l1_mutex
 		, l2_mutex;
@@ -53,7 +54,7 @@ main( int argc, char* argv[] )
 
 	if( !loop )
 	{
-		LOG_CLOG( log_error ) << "Cannot initiate program loop.";
+		LOG_CERR( log_error ) << "Cannot initiate program loop.";
 		return EXIT_FAILURE;
 	}
 
@@ -88,7 +89,7 @@ main( int argc, char* argv[] )
 
 		if( opts_map["config-path"].empty() )
 		{
-			LOG_CLOG( log_error ) << "You must supply a path for the configuration file.";
+			LOG_CERR( log_error ) << "You must supply a path for the configuration file.";
 			return EXIT_FAILURE;
 		}
 
@@ -117,6 +118,7 @@ main( int argc, char* argv[] )
 			( "audiofilter.depth"               , app_opts::value<int>()         , "" )
 			( "datarate.watch-position"         , app_opts::value<int>()         , "" )
 			( "datarate.min-threshold"          , app_opts::value<int>()         , "" )
+			( "datarate.flag-location"          , app_opts::value<std::string>() , "" )	
 			( "v4l2source.always-copy"          , app_opts::value<bool>()        , "" )
 			( "v4l2source.device"        	    , app_opts::value<std::string>() , "" )
 			( "v4l2source.queue-size"           , app_opts::value<int>()         , "" )
@@ -137,14 +139,15 @@ main( int argc, char* argv[] )
 			( "dsp-encoder.max-size-bytes"      , app_opts::value<int>()         , "" )
 			( "dsp-encoder.use-TIPrepEncBuf"    , app_opts::value<bool>()        , "" )
 			( "execution.messages-detail"       , app_opts::value<int>()         , "" )
-			( "execution.watchdog-awareness"    , app_opts::value<int>()         , "" )
+			( "execution.l1-watchdog-awareness" , app_opts::value<int>()         , "" )
+			( "execution.l2-watchdog-awareness" , app_opts::value<int>()         , "" )
 		;
 
 		std::ifstream config_file( opts_map["config-path"].as<std::string>().c_str() );
 
 		if( !config_file )
 		{
-			LOG_CLOG( log_error ) << "Configuration file not found. Exiting...";
+			LOG_CERR( log_error ) << "Configuration file not found. Exiting...";
 			return EXIT_FAILURE;
 		}	
 
@@ -163,14 +166,14 @@ main( int argc, char* argv[] )
 					auto cur_opt = arg.get()->format_name().substr(2, arg.get()->format_name().length() - 2);
 					if( opts_map[cur_opt].empty() )
 					{
-						LOG_CLOG( log_error ) << "Parameter '" << cur_opt << "' is not properly set.";
+						LOG_CERR( log_error ) << "Parameter '" << cur_opt << "' is not properly set.";
 						param_flag = false;
 					}
 				} );
 
 		if( !param_flag )
 		{
-			LOG_CLOG( log_error ) << "Invalid configuration. Exiting...";
+			LOG_CERR( log_error ) << "Invalid configuration. Exiting...";
 			return EXIT_FAILURE;
 		}
 
@@ -180,7 +183,7 @@ main( int argc, char* argv[] )
 		LOG_CLOG( log_info ) << "Initializing level 2 watchdog...";
 
 		auto l2_watch_cfg = boost::bind( l2_watch_loop, &l1_guard, &l2_mutex
-				, opts_map["execution.watchdog-awareness"].as<int>() );
+				, opts_map["execution.l2-watchdog-awareness"].as<int>() );
 
 		boost::thread l2_watch_thread( l2_watch_cfg );
 
@@ -198,7 +201,7 @@ main( int argc, char* argv[] )
 
 		LOG_CLOG( log_info ) << "Registering callbacks...";
 
-		dt_params d_params = boost::make_tuple( &l1_mutex, &buffers_passed, &buffers_size, loop );
+		dt_params d_params = boost::make_tuple( &l1_mutex, &buffers_info[0], &buffers_info[1], loop );
 
 		{
 			gstbus_pt pipe_bus( gst_pipeline_get_bus( GST_PIPELINE( videosource.root_bin.get() ) )
@@ -212,9 +215,10 @@ main( int argc, char* argv[] )
 
 		LOG_CLOG( log_info ) << "Initializing level 1 watchdog...";
 
-		auto l1_watch_cfg = boost::bind( l1_watch_loop, &videosource, &l1_mutex, &buffers_passed, &buffers_size
+		auto l1_watch_cfg = boost::bind( l1_watch_loop, &videosource, &l1_mutex, buffers_info
+					, opts_map["datarate.flag-location"].as<std::string>()	
 					, opts_map["datarate.min-threshold"].as<int>()
-					, opts_map["execution.watchdog-awareness"].as<int>()
+					, opts_map["execution.l1-watchdog-awareness"].as<int>()
 					, &l1_guard, &l2_mutex );
 
 		boost::thread l1_watch_thread( l1_watch_cfg );

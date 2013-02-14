@@ -57,7 +57,7 @@ namespace video_source
 
 		if( !link_flag )
 		{
-			LOG_CLOG( log_error ) << "Video filter linking error.";
+			LOG_CERR( log_error ) << "Video filter linking error.";
 			BOOST_THROW_EXCEPTION( api_error() << api_info( "Couldn't connect to filter." ) );
 		}
 	}
@@ -92,7 +92,7 @@ namespace video_source
 
 		if( !link_flag )
 		{
-			LOG_CLOG( log_error ) << "Audio filter linking error.";
+			LOG_CERR( log_error ) << "Audio filter linking error.";
 			BOOST_THROW_EXCEPTION( api_error() << api_info( "Couldn't connect to filter." ) );
 		}
 	}
@@ -198,7 +198,7 @@ namespace video_source
 				        , elements["dspqueue"], elements["dspenc"], elements["queue0"], elements["mux"]
 				        , elements["queue1"], elements["networksink"], NULL ) )
 				{
-					LOG_CLOG( log_error ) << "Failed to link elements.";
+					LOG_CERR( log_error ) << "Failed to link elements.";
 					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 				}
 			}
@@ -207,7 +207,7 @@ namespace video_source
 				if( !gst_element_link_many( elements["ffmpegcs"], elements["clockoverlay"], elements["dspenc"]
 				        , elements["queue0"], elements["mux"], elements["queue1"], elements["networksink"], NULL ) )
 				{
-					LOG_CLOG( log_error ) << "Failed to link elements.";
+					LOG_CERR( log_error ) << "Failed to link elements.";
 					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 				}
 			}
@@ -221,7 +221,7 @@ namespace video_source
 				if( !gst_element_link_many( elements["ffmpegcs"], elements["videorate"]
 				        , elements["clockoverlay"], NULL ) )
 				{
-					LOG_CLOG( log_error ) << "Failed to link elements.";
+					LOG_CERR( log_error ) << "Failed to link elements.";
 					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 				}
 			}
@@ -237,7 +237,7 @@ namespace video_source
 					if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"]
 					        , elements["clockoverlay"], NULL ) )
 					{
-						LOG_CLOG( log_error ) << "Failed to link elements.";
+						LOG_CERR( log_error ) << "Failed to link elements.";
 						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 					}
 				}
@@ -248,7 +248,7 @@ namespace video_source
 					if( !gst_element_link_many( elements["ffmpegcs"], elements["identity"]
 					        , elements["videorate"], NULL ) )
 					{
-						LOG_CLOG( log_error ) << "Failed to link elements.";
+						LOG_CERR( log_error ) << "Failed to link elements.";
 						BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 					}
 				}
@@ -262,7 +262,7 @@ namespace video_source
 				if( !gst_element_link_many( elements["dspenc"], elements["identity"]
 				        , elements["queue0"], NULL ) )
 				{
-					LOG_CLOG( log_error ) << "Failed to link elements.";
+					LOG_CERR( log_error ) << "Failed to link elements.";
 					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 				}
 			}
@@ -275,7 +275,7 @@ namespace video_source
 				if( !gst_element_link_many( elements["mux"], elements["identity"]
 				        , elements["queue1"], NULL ) )
 				{
-					LOG_CLOG( log_error ) << "Failed to link elements.";
+					LOG_CERR( log_error ) << "Failed to link elements.";
 					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 				}
 			}
@@ -288,7 +288,7 @@ namespace video_source
 				if( !gst_element_link_many( elements["queue1"], elements["identity"]
 				        , elements["networksink"], NULL ) )
 				{
-					LOG_CLOG( log_error ) << "Failed to link elements.";
+					LOG_CERR( log_error ) << "Failed to link elements.";
 					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 				}
 			}
@@ -317,7 +317,7 @@ namespace video_source
 				if( !gst_element_link_many( elements["audioresample"], elements["audioenc"], elements["queue2"]
 				        , NULL ) )
 				{
-					LOG_CLOG( log_error ) << "Failed to link elements.";
+					LOG_CERR( log_error ) << "Failed to link elements.";
 					BOOST_THROW_EXCEPTION( api_error() << api_info( "Linking failure." ) );
 				}
 
@@ -328,13 +328,13 @@ namespace video_source
 
 				if( !queue_src | !mux_sink )
 				{
-					LOG_CLOG( log_error ) << "Failed to retrieve element pads.";
+					LOG_CERR( log_error ) << "Failed to retrieve element pads.";
 					BOOST_THROW_EXCEPTION( api_error() << api_info( "Pad retrieving error." ) );
 				}
 
 				if( gst_pad_link( queue_src, mux_sink ) != GST_PAD_LINK_OK )
 				{
-					LOG_CLOG( log_error ) << "Failed to link pads.";
+					LOG_CERR( log_error ) << "Failed to link pads.";
 					BOOST_THROW_EXCEPTION( api_error() << api_info( "Pad linking error." ) );
 				}
 
