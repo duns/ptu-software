@@ -3,6 +3,8 @@
 export GST_DEBUG=2
 
 LOGFILENAME=/tmp/`date +"%y%m%d-%H%M%S"`.log
+CAMERADEVICE=/dev/camera
+SLEEPTIME=2
 
 stop_execution()
 {
@@ -26,6 +28,11 @@ trap control_c SIGINT
 
 while true
 do
-	echo `date +"%H:%M:%S.%N"` " - Raising Source" >> ${LOGFILENAME}
-	videosource --config-path=/etc/videosource/vsource.conf 2>> ${LOGFILENAME} 
+	if [ -e $CAMERADEVICE ];then
+		echo `date +"%H:%M:%S.%N"` " - Raising Source" >> ${LOGFILENAME}
+		videosource --config-path=/etc/videosource/vsource.conf 2>> ${LOGFILENAME} 
+		echo `date +"%H:%M:%S.%N"` " - Source Exited" >> ${LOGFILENAME}
+	else
+		sleep $SLEEPTIME
+	fi
 done
