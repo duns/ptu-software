@@ -12,7 +12,7 @@
 #include <fstream>
 #include <cmath>
 #define DEFAULTBASEDUR 2.0
-float basedur;
+float basedur=-1;
 
 long stringtonum(std::string str)
 {

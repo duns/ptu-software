@@ -20,7 +20,7 @@ notes="B16 5Ds16 B16 5Fs16 B16 5Ds16 \
  5E16 B16 5G16 B16 \
  5E16 B16 5G16 B16 "
 notes="C16 D16 E16 F16 G16 A16 B16 5C16"
-BASEDUR=2.0
+BASEDUR=2
 PWMDEV=/dev/pwm8
 TUNESBIN=/usr/bin/tunes
 [ -n "$@" ] && notes="$@"
