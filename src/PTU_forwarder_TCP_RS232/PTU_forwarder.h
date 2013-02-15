@@ -15,6 +15,8 @@
 #define SERIAL_BAUD_PARAM_NAME "SerialPortBaud"
 #define DOS_ID_PARAM_NAME "DosimeterID"
 #define CO2_EMF1_PARAM_NAME "CO2_EMF1"
+#define O2_CALIBA_PARAM_NAME "O2_CalibA"
+#define O2_CALIBB_PARAM_NAME "O2_CalibB"
 
 #define SAMPLE_RATE_PARAM_NAME "SamplingRate"
 #define UP_LVL_PARAM_NAME "UpLevel"
