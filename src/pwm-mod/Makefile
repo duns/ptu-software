@@ -12,8 +12,10 @@ else
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules 
 endif
 
-install:
-	scp pwm.ko root@192.168.10.106:/home/root
+tunes: tunes.cpp
+	$(CXX) -std=c++0x tunes.cpp -o tunes
+#install:
+#	scp pwm.ko root@192.168.10.106:/home/root
 
 
 clean:
