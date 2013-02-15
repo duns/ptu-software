@@ -1,5 +1,6 @@
 #!/bin/sh
 PIPEFILE="/home/root/pipe_write"
+PWMDEV="/dev/pwm8"
 . /etc/profile
 
 led_con_status()
@@ -27,7 +28,7 @@ led_con_status()
                 ;;
         esac
 }
-
+LASTBATTERY_LED_STATUS=3
 led_con_status 3			
 while true
 do
@@ -35,16 +36,29 @@ do
 		read -t 2 line <> "$PIPEFILE"
 		if [ -n "$line" ];then
 			case $line in
+				Event2_UpLevel_DoseAccum)
+				led_con_status 1			
+				echo -1000 > ${PWMDEV}
+				echo 50 > ${PWMDEV}
+				;;	
+				Event2_DownLevel_DoseAccum)
+				led_con_status ${LASTBATTERY_LED_STATUS}
+				echo 0 > ${PWMDEV}
+				;;	
 				Event2_UpLevel_BatteryLevel)
+				LASTBATTERY_LED_STATUS=4
 				led_con_status 4			
 				;;	
 				Event2_DownLevel_BatteryLevel)
+				LASTBATTERY_LED_STATUS=1
 				led_con_status 1			
 				;;	
 				Event3_ValueChange_BatteryLevel)
+				LASTBATTERY_LED_STATUS=3
 				led_con_status 3			
 				;;	
 			esac
+
 		fi
 	else
 		led_con_status 2
