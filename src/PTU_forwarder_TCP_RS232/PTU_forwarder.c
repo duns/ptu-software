@@ -226,10 +226,12 @@ int main (void)
 			#ifdef PIPES_RD
 			if ( FD_ISSET(pipe_read, &rfds) )
 			{
-				pipe_n = read(pipe_read, pipe_rd_buf, 4096);
+				//pipe_n = read(pipe_read, pipe_rd_buf, sizeof("panic\n"));
+				pipe_n = read(pipe_read, pipe_rd_buf, sizeof(pipe_rd_buf)-1);
 				if (pipe_n>0)
 				{
-					if (!strcmp(pipe_rd_buf, "panic"))
+					pipe_rd_buf[pipe_n]='\0';
+					if (strstr(pipe_rd_buf, "panic"))
 					{
 						handle_pipe_msg();
 					}
@@ -944,7 +946,7 @@ int meas_to_JSON(uint16_t sensors_bitmap)
 			strcpy(lvl_str, "UpLevel");
 			thres = reg_lvls[cur_reg].up_thres;
 			#ifdef PIPES_WR
-			sprintf(pipe_wr_buf, "Event2_UpLevel_%s", sensor_type_str[cur_reg ]);
+			sprintf(pipe_wr_buf, "Event2_UpLevel_%s\n", sensor_type_str[cur_reg ]);
 			new_pipe_wr = 1;
 			#endif
 		}
@@ -954,7 +956,7 @@ int meas_to_JSON(uint16_t sensors_bitmap)
 			strcpy(lvl_str, "DownLevel");
 			thres = reg_lvls[cur_reg].down_thres;
 			#ifdef PIPES_WR
-			sprintf(pipe_wr_buf, "Event2_DownLevel_%s", sensor_type_str[cur_reg ]);
+			sprintf(pipe_wr_buf, "Event2_DownLevel_%s\n", sensor_type_str[cur_reg ]);
 			new_pipe_wr = 1;
 			#endif
 		}
@@ -963,7 +965,7 @@ int meas_to_JSON(uint16_t sensors_bitmap)
 			value_change_flag[cur_reg] = 0;
 
 			#ifdef PIPES_WR
-			sprintf(pipe_wr_buf, "Event3_ValueChange_%s", sensor_type_str[cur_reg ]);
+			sprintf(pipe_wr_buf, "Event3_ValueChange_%s\n", sensor_type_str[cur_reg ]);
 			new_pipe_wr = 1;
 			#endif
 
@@ -1639,7 +1641,7 @@ void handle_modbus_pkg()
 				if (json_msg != NULL) free(json_msg);
 				#endif
 				#ifdef PIPES_WR
-				sprintf(pipe_wr_buf, "Event2_FallDetection_Accelerometer");
+				sprintf(pipe_wr_buf, "Event2_FallDetection_Accelerometer\n");
 				new_pipe_wr = 1;
 				#endif
 			}
@@ -1664,7 +1666,7 @@ void handle_modbus_pkg()
 				if (json_msg != NULL) free(json_msg);
 				#endif
 				#ifdef PIPES_WR
-				sprintf(pipe_wr_buf, "Event2_DoseRateAlert_DoseRate");
+				sprintf(pipe_wr_buf, "Event2_DoseRateAlert_DoseRate\n");
 				new_pipe_wr = 1;
 				#endif
 			}
@@ -1703,7 +1705,7 @@ void handle_modbus_pkg()
 				if (json_msg != NULL) free(json_msg);
 				#endif
 				#ifdef PIPES_WR
-				sprintf(pipe_wr_buf, "Event2_DosConnectionStatus_%s", dos_status);
+				sprintf(pipe_wr_buf, "Event2_DosConnectionStatus_%s\n", dos_status);
 				new_pipe_wr = 1;
 				#endif
 			}
@@ -1775,7 +1777,7 @@ void handle_pipe_msg(void)
 	int json_len;
 
 	#ifdef PIPES_WR
-	sprintf(pipe_wr_buf, "Event1_Panic");
+	sprintf(pipe_wr_buf, "Event1_Panic\n");
 	new_pipe_wr = 1;
 	#endif
 
