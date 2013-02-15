@@ -95,11 +95,12 @@ const unsigned short crc16Table[256] = {
 ser_float meas[NO_OF_REGISTERS];
 reg_level_info reg_lvls[NO_OF_REGISTERS];
 sampling_timer reg_timers[NO_OF_REGISTERS];
+sampling_timer reg_send_timers[NO_OF_REGISTERS];
 time_t timestamps[NO_OF_REGISTERS];
 
 char * sensor_type_str[NO_OF_REGISTERS] = { "Temperature", "Humidity", "O2", "CO2", "HeartRate", "DoseAccum", "DoseRate", "BodyTemperature", "BarometricPressure", "BatteryLevel"};
 char * meas_units[NO_OF_REGISTERS] = { "C", "%", "%", "ppm", "bpm", "mSv", "mSv/h", "C", "bar", "%"};
-const char * register_params[4] = { SAMPLE_RATE_PARAM_NAME, UP_LVL_PARAM_NAME, DOWN_LVL_PARAM_NAME, VAL_CHANGE_PARAM_NAME};
+const char * register_params[5] = { SAMPLE_RATE_PARAM_NAME, UP_LVL_PARAM_NAME, DOWN_LVL_PARAM_NAME, VAL_CHANGE_PARAM_NAME, SEND_SAMPLE_RATE_PARAM_NAME};
 const char * program_params[9] = {SERVER_IP_PARAM_NAME, SERVER_PORT_PARAM_NAME, SERIAL_PORT_PARAM_NAME, SERIAL_BAUD_PARAM_NAME, DOS_ID_PARAM_NAME, CO2_EMF1_PARAM_NAME, O2_CALIBA_PARAM_NAME, O2_CALIBB_PARAM_NAME, UNIT_NAME_PARAM_NAME};
 char value_change_flag[NO_OF_REGISTERS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 float last_value_change[NO_OF_REGISTERS] = {25, 40, 18, 350, 60, 0.1, 0, 35, 1, 7};
@@ -283,6 +284,7 @@ int main (void)
 
         ftime(&tp2);
 		update_timers((tp2.time - tp1.time)*1000 + tp2.millitm - tp1.millitm);
+		update_send_timers((tp2.time - tp1.time)*1000 + tp2.millitm - tp1.millitm);
 
 		handle_modbus_pkg();
 	}
@@ -306,6 +308,7 @@ void init()
 	for(i =0; i < NO_OF_REGISTERS; i++)
 	{
 		reg_timers[i].countdown = 0;
+		reg_send_timers[i].countdown = 0;
 		reg_lvls[i].lvl = MID_LVL;
 	}
 
@@ -548,6 +551,62 @@ void init_tcp_conn()
 }
 
 /*
+ * Updates reg send timers, reducing their countdown value by the amount of time
+ * contained in the parameter elapsed.
+ */
+void update_send_timers(uint32_t ellapsed)
+{
+	int i;
+
+	for(i = 0; i < NO_OF_REGISTERS; i++)
+	{
+		if( reg_send_timers[i].countdown > 0 )
+		{
+			if(reg_send_timers[i].countdown > ellapsed) reg_send_timers[i].countdown -= ellapsed;
+			else reg_send_timers[i].countdown = 0;
+		}
+	}
+}
+
+/*
+ * Finds out which reg send timers have expired and returns the result in
+ * a bitmap, e.g. 00000101(bin) -> timers 1 and 3 have expired
+ */
+uint16_t expired_send_timers()
+{
+	int i;
+	uint16_t bitmap = 0;
+
+	for(i = 0; i < NO_OF_REGISTERS; i++)
+	{
+		if( reg_send_timers[i].countdown == 0 )
+		{
+			bitmap |= (1 << i);
+		}
+	}
+	return bitmap;
+}
+
+/*
+ * Reset the register send timers to the respective register poll period value
+ */
+void reset_expired_send_timers(uint16_t bitmap)
+{
+	int i;
+
+	for(i = 0; i < NO_OF_REGISTERS; i++)
+	{
+		if (bitmap & (1 << i))
+		{
+			if( !reg_send_timers[i].countdown )
+			{
+				reg_send_timers[i].countdown = reg_send_timers[i].period;
+			}
+		}
+	}
+}
+
+/*
  * Updates reg timers, reducing their countdown value by the amount of time
  * contained in the parameter elapsed.
  */
@@ -670,7 +729,8 @@ int read_conf_settings()
 			fclose(conf_file);
 			return -2;
 		}
-		if(fscanf(conf_file, SAMPLE_RATE_CONF_LINE, &reg_timers[cur_reg].period) != 1 ||
+		if(fscanf(conf_file, SEND_SAMPLE_RATE_CONF_LINE, &reg_send_timers[cur_reg].period) != 1 ||
+				fscanf(conf_file, SAMPLE_RATE_CONF_LINE, &reg_timers[cur_reg].period) != 1 ||
 				fscanf(conf_file, UP_LVL_CONF_LINE, &reg_lvls[cur_reg].up_thres) != 1 ||
 				fscanf(conf_file, DOWN_LVL_CONF_LINE, &reg_lvls[cur_reg].down_thres) != 1 ||
 				fscanf(conf_file, VAL_CHANGE_CONF_LINE, &reg_lvls[cur_reg].val_change_thres) != 1)
@@ -726,6 +786,7 @@ int write_conf_settings()
 	for(cur_reg = 0; cur_reg < NO_OF_REGISTERS; cur_reg++)
 	{
 		if( (sum +=fprintf(conf_file, SENSOR_REG_TYPE_LINE, sensor_type_str[cur_reg])) <= 0 ||
+			(sum +=fprintf(conf_file, SEND_SAMPLE_RATE_CONF_LINE, reg_send_timers[cur_reg].period)) <= 0 ||
 			(sum +=fprintf(conf_file, SAMPLE_RATE_CONF_LINE, reg_timers[cur_reg].period)) <= 0 ||
 			(sum +=fprintf(conf_file, UP_LVL_CONF_LINE, reg_lvls[cur_reg].up_thres)) <= 0 ||
 			(sum +=fprintf(conf_file, DOWN_LVL_CONF_LINE, reg_lvls[cur_reg].down_thres)) <= 0 ||
@@ -1473,6 +1534,13 @@ int parse_json_msg()
 										ret = sscanf(cursor->child->text, "%f",&value);
 										if (ret == 1 ) reg_lvls[i].val_change_thres = value;
 									}
+									//Write send sampling rate
+									else if( !strcmp(cursor->child->text, register_params[4]) )
+									{
+										if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
+										ret = sscanf(cursor->child->text, "%f",&value);
+										if (ret == 1 ) reg_send_timers[i].period = value;
+									}
 								}
 							}
 						}
@@ -1661,7 +1729,7 @@ void handle_modbus_pkg()
 	char print_buf[50];
 	char * dos_status;
 	uint8_t json_flag;
-	uint16_t bitmap, bmp_addr;
+	uint16_t bitmap, bmp_addr, regs_send_bmp;
 	time_t local_time_secs;
 	struct tm * timeinfo_debug;
 	char txt_buf[20];
@@ -1790,23 +1858,27 @@ void handle_modbus_pkg()
 			}
 			else if (registers[j].register_id != 0x64)
 			{
-				json_flag = 1;
+				regs_send_bmp = expired_send_timers();
+
 				n= registers[j].register_id-1;
 				if (fabsf(registers[j].value.val - last_value_change[n]) >= reg_lvls[n].val_change_thres)
 				{
 					last_value_change[n] = registers[j].value.val;
 					value_change_flag[n] = 1;
+					regs_send_bmp |= (1 << n);
 				}
 				meas[n].val_int32 = registers[j].value.val_int32;
 				if( meas[n].val >= reg_lvls[n].up_thres && reg_lvls[n].lvl != UP_LVL)
 				{
 					reg_lvls[n].lvl = UP_LVL;
 					reg_lvls[n].alarm = UP_ALARM;
+					regs_send_bmp |= (1 << n);
 				}
 				else if( meas[n].val <= reg_lvls[n].down_thres && reg_lvls[n].lvl != DOWN_LVL)
 				{
 					reg_lvls[n].lvl = DOWN_LVL;
 					reg_lvls[n].alarm = DOWN_ALARM;
+					regs_send_bmp |= (1 << n);
 				}
 				else if( meas[n].val < reg_lvls[n].up_thres &&
 						meas[n].val > reg_lvls[n].down_thres &&
@@ -1816,6 +1888,9 @@ void handle_modbus_pkg()
 				}
 				timestamps[n] = time(NULL);
 
+				regs_send_bmp &= bitmap;
+				if (regs_send_bmp) json_flag = 1;
+
 				#ifdef DEBUG
 				printf("received value: %s, %f\n", sensor_type_str[n], meas[n].val);
 				#endif
@@ -1823,8 +1898,9 @@ void handle_modbus_pkg()
 		}
 		if (json_flag)
 		{
+			reset_expired_send_timers(regs_send_bmp);
 			#ifdef TCP_CONN
-			jason_len = meas_to_JSON(bitmap);
+			jason_len = meas_to_JSON(regs_send_bmp);
 			frame_id++;
 			if ( !send_msg_to_tcp(json_msg, jason_len) )
 			{

@@ -19,12 +19,14 @@
 #define O2_CALIBB_PARAM_NAME "O2_CalibB"
 
 #define SAMPLE_RATE_PARAM_NAME "SamplingRate"
+#define SEND_SAMPLE_RATE_PARAM_NAME "SendSamplingRate"
 #define UP_LVL_PARAM_NAME "UpLevel"
 #define DOWN_LVL_PARAM_NAME "DownLevel"
 #define VAL_CHANGE_PARAM_NAME "ValueChangeThres"
 
 #define SENSOR_REG_TYPE_LINE "#%s\n"
 #define SAMPLE_RATE_CONF_LINE SAMPLE_RATE_PARAM_NAME ": %u\n"
+#define SEND_SAMPLE_RATE_CONF_LINE SEND_SAMPLE_RATE_PARAM_NAME ": %u\n"
 #define UP_LVL_CONF_LINE UP_LVL_PARAM_NAME ": %f\n"
 #define DOWN_LVL_CONF_LINE DOWN_LVL_PARAM_NAME ": %f\n"
 #define VAL_CHANGE_CONF_LINE VAL_CHANGE_PARAM_NAME ": %f\n"
@@ -92,6 +94,9 @@ typedef struct
 void init();
 int init_serial();
 void init_tcp_conn();
+void update_send_timers(uint32_t ellapsed);
+uint16_t expired_send_timers();
+void reset_expired_send_timers(uint16_t bitmap);
 void update_timers(uint32_t ellapsed);
 uint16_t expired_timers();
 void reset_expired_timers();
