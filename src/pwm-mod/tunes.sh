@@ -20,82 +20,10 @@ notes="B16 5Ds16 B16 5Fs16 B16 5Ds16 \
  5E16 B16 5G16 B16 \
  5E16 B16 5G16 B16 "
 notes="C16 D16 E16 F16 G16 A16 B16 5C16"
-basedur=2.0
+BASEDUR=2
 PWMDEV=/dev/pwm8
-[ -n "$1" ] && notes="$1"
+TUNESBIN=/usr/bin/tunes
+[ -n "$@" ] && notes="$@"
+echo $notes |  $TUNESBIN $PWMDEV $BASEDUR
 
-	numnotes=0
-for note in $notes
-do
-	register=`echo $note | sed -e 's/[a-zA-Z]*[0-9]*$//'`
-	duration=`echo $note | sed -e 's/[0-9]*[a-zA-Z]*//'`
-	note=`echo $note | sed -e 's/[0-9]*//g'`
-	[ -z $register ] && register=4 
-	[ -z $duration ] && duration=8
-#echo $note $register $duration
-	case $note in
-	C)
-		frequency=262;
-		;;
-	Cs)
-		frequency=277;
-		;;
-	D)
-		frequency=294;
-		;;
-	Ds)
-		frequency=311;
-		;;
-	E)
-		frequency=330;
-		;;
-	F)
-		frequency=349;
-		;;
-	Fs)
-		frequency=370;
-		;;
-	G)
-		frequency=392;
-		;;
-	Gs)
-		frequency=415;
-		;;
-	A)
-		frequency=440;
-		;;
-	As)
-		frequency=466;
-		;;
-	B)
-		frequency=494;
-		;;
-	P)
-		frequency=0;
-		;;
-	esac
-	sleepdur=`echo "scale=2;$basedur/$duration"| bc  `
-	frequency=`echo $frequency \* 2 ^ \( $register - 4 \) | bc `
-#echo $note $frequency $duration
-			
-#	echo $sleepdur $frequency
-	sdur[$numnotes]=$sleepdur
-	freq[$numnotes]=$frequency
-	(( numnotes++ ))
 
-done
-
-for  (( i=0 ; i<numnotes ; i++ )) 
-do
-	frequency=${freq[$i]}
-	sleepdur=${sdur[$i]}
-   if [ $frequency -eq 0 ]; then
-                echo 0 > $PWMDEV
-        else
-                echo "-"$frequency >  $PWMDEV
-                echo 50 > $PWMDEV
-        fi
-	sleep $sleepdur
-
-done
-echo 0 > $PWMDEV
