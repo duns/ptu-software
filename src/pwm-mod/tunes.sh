@@ -23,7 +23,7 @@ notes="C16 D16 E16 F16 G16 A16 B16 5C16"
 BASEDUR=2
 PWMDEV=/dev/pwm8
 TUNESBIN=/usr/bin/tunes
-[ -n "$@" ] && notes="$@"
+[ -n "$1" ] && notes="$@"
 echo $notes |  $TUNESBIN $PWMDEV $BASEDUR
 
 
