@@ -37,7 +37,7 @@ char new_modbus_pkg;
 char *mac_address;
 char server_ip[50];
 char dos_id[6];
-ser_float CO2_emf1;
+ser_float CO2_emf1, O2_calibA, O2_calibB;
 char server_port[10];
 int frame_id;
 char reply[100];
@@ -100,7 +100,7 @@ time_t timestamps[NO_OF_REGISTERS];
 char * sensor_type_str[NO_OF_REGISTERS] = { "Temperature", "Humidity", "O2", "CO2", "HeartRate", "DoseAccum", "DoseRate", "BodyTemperature", "BarometricPressure", "BatteryLevel"};
 char * meas_units[NO_OF_REGISTERS] = { "C", "%", "%", "ppm", "bpm", "mSv", "mSv/h", "C", "bar", "%"};
 const char * register_params[4] = { SAMPLE_RATE_PARAM_NAME, UP_LVL_PARAM_NAME, DOWN_LVL_PARAM_NAME, VAL_CHANGE_PARAM_NAME};
-const char * program_params[7] = {SERVER_IP_PARAM_NAME, SERVER_PORT_PARAM_NAME, SERIAL_PORT_PARAM_NAME, SERIAL_BAUD_PARAM_NAME, DOS_ID_PARAM_NAME, CO2_EMF1_PARAM_NAME, UNIT_NAME_PARAM_NAME};
+const char * program_params[9] = {SERVER_IP_PARAM_NAME, SERVER_PORT_PARAM_NAME, SERIAL_PORT_PARAM_NAME, SERIAL_BAUD_PARAM_NAME, DOS_ID_PARAM_NAME, CO2_EMF1_PARAM_NAME, O2_CALIBA_PARAM_NAME, O2_CALIBB_PARAM_NAME, UNIT_NAME_PARAM_NAME};
 char value_change_flag[NO_OF_REGISTERS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 float last_value_change[NO_OF_REGISTERS] = {25, 40, 18, 350, 60, 0.1, 0, 35, 1, 7};
 char * json_msg;
@@ -226,7 +226,6 @@ int main (void)
 			#ifdef PIPES_RD
 			if ( FD_ISSET(pipe_read, &rfds) )
 			{
-				//pipe_n = read(pipe_read, pipe_rd_buf, sizeof("panic\n"));
 				pipe_n = read(pipe_read, pipe_rd_buf, sizeof(pipe_rd_buf)-1);
 				if (pipe_n>0)
 				{
@@ -835,6 +834,60 @@ void CO2_calibrate()
 }
 
 /*
+ * Writes the specified a value in order to calibrate the O2 sensor
+ */
+void O2_calibrateA()
+{
+	uint8_t pkg[9];
+	uint16_t crc;
+
+	pkg[0] = 0x06;
+	pkg[1] = 0x00;
+	pkg[2] = 0x67;
+	pkg[3] = O2_calibA.bytes[0];
+	pkg[4] = O2_calibA.bytes[1];
+	pkg[5] = O2_calibA.bytes[2];
+	pkg[6] = O2_calibA.bytes[3];
+	crc = CheckCRC(&pkg[0], 7);
+	pkg[7] = (uint8_t) (crc >> 8);
+	pkg[8] = (uint8_t) (crc);
+
+	if(write(cport, pkg, 9) != 9)
+	{
+		#ifdef ERROR_VERB
+		perror("Error calibrating O2 sensor A:");
+		#endif
+	}
+}
+
+/*
+ * Writes the specified b value in order to calibrate the O2 sensor
+ */
+void O2_calibrateB()
+{
+	uint8_t pkg[9];
+	uint16_t crc;
+
+	pkg[0] = 0x06;
+	pkg[1] = 0x00;
+	pkg[2] = 0x68;
+	pkg[3] = O2_calibB.bytes[0];
+	pkg[4] = O2_calibB.bytes[1];
+	pkg[5] = O2_calibB.bytes[2];
+	pkg[6] = O2_calibB.bytes[3];
+	crc = CheckCRC(&pkg[0], 7);
+	pkg[7] = (uint8_t) (crc >> 8);
+	pkg[8] = (uint8_t) (crc);
+
+	if(write(cport, pkg, 9) != 9)
+	{
+		#ifdef ERROR_VERB
+		perror("Error calibrating O2 sensor B:");
+		#endif
+	}
+}
+
+/*
  *Sends a read command to the serial port through the modbus protocol. The sensor
  *register is specified by the reg parameter and the number of registers to read is
  *specified by the num parameter. Returns 1 in case an error occurs.
@@ -1343,8 +1396,34 @@ int parse_json_msg()
 										#endif
 									}
 								}
+								//Write O2 a value for calibration of O2 sensor
+								else if( !strcmp(cursor->child->text, program_params[6]) )
+								{
+									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
+									ret = sscanf(cursor->child->text, "%f",&value);
+									if (ret == 1 )
+									{
+										O2_calibA.val = value;
+										#ifdef SERIAL
+										O2_calibrateA();
+										#endif
+									}
+								}
+								//Write O2 b value for calibration of O2 sensor
+								else if( !strcmp(cursor->child->text, program_params[7]) )
+								{
+									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
+									ret = sscanf(cursor->child->text, "%f",&value);
+									if (ret == 1 )
+									{
+										O2_calibB.val = value;
+										#ifdef SERIAL
+										O2_calibrateB();
+										#endif
+									}
+								}
 								//Write PTU unit name
-								else if (!strcmp(cursor->child->text, program_params[6]))
+								else if (!strcmp(cursor->child->text, program_params[8]))
 								{
 									if( (cursor = json_find_first_label(entry, "Value")) == NULL) continue;
 									svalue = cursor->child->text;
