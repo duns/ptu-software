@@ -4,7 +4,7 @@ export GST_DEBUG=2
 
 LOGFILENAME=/tmp/`date +"%y%m%d-%H%M%S"`.log
 CAMERADEVICE=/dev/camera
-SLEEPTIME=2
+SLEEPTIME=5
 
 stop_execution()
 {
@@ -34,5 +34,6 @@ do
 		echo `date +"%H:%M:%S.%N"` " - Source Exited" >> ${LOGFILENAME}
 	else
 		sleep $SLEEPTIME
+		beep.sh B 0.1 >/dev/null 2>&1
 	fi
 done
