@@ -3,8 +3,8 @@
 #set -x
 note=A
 sleepdur=0.25
-[ -n "$1" ] && note = $1
-[ -n "$2" ] && sleepdur = $2
+[ -n "$1" ] && note=$1
+[ -n "$2" ] && sleepdur=$2
 PWMDEV=/dev/pwm8
 
 	case $note in
