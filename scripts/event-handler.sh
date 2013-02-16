@@ -19,10 +19,14 @@ led_con_status()
                         echo none > ${WPSS_LED_BAT}/trigger
                 ;;
                 3)
+                        echo default-on > ${WPSS_LED_STAT}/trigger
+                        echo default-on > ${WPSS_LED_BAT}/trigger
+                ;;
+                4)
                         echo none > ${WPSS_LED_STAT}/trigger
                         echo timer > ${WPSS_LED_BAT}/trigger
                 ;;
-                4)
+                5)
                         echo none > ${WPSS_LED_STAT}/trigger
                         echo default-on > ${WPSS_LED_BAT}/trigger
                 ;;
@@ -36,6 +40,19 @@ do
 		read -t 2 line <> "$PIPEFILE"
 		if [ -n "$line" ];then
 			case $line in
+				Event2_UpLevel_DoseRate)
+				led_con_status 1			
+				echo -1000 > ${PWMDEV}
+				echo 50 > ${PWMDEV}
+				;;	
+				Event2_DownLevel_DoseRate)
+				led_con_status ${LASTBATTERY_LED_STATUS}
+				echo 0 > ${PWMDEV}
+				;;	
+				Event3_ValueChange_DoseRate)
+				led_con_status ${LASTBATTERY_LED_STATUS}
+				echo 0 > ${PWMDEV}
+				;;	
 				Event2_UpLevel_DoseAccum)
 				led_con_status 1			
 				echo -1000 > ${PWMDEV}
@@ -45,9 +62,13 @@ do
 				led_con_status ${LASTBATTERY_LED_STATUS}
 				echo 0 > ${PWMDEV}
 				;;	
+				Event3_ValueChange_DoseRate)
+				led_con_status ${LASTBATTERY_LED_STATUS}
+				echo 0 > ${PWMDEV}
+				;;	
 				Event2_UpLevel_BatteryLevel)
 				LASTBATTERY_LED_STATUS=4
-				led_con_status 4			
+				led_con_status 5			
 				;;	
 				Event2_DownLevel_BatteryLevel)
 				LASTBATTERY_LED_STATUS=1
