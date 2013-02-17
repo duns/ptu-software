@@ -67,16 +67,16 @@ do
 #				echo 0 > ${PWMDEV}
 #				;;	
 				Event*_UpLevel_BatteryLevel)
-				LASTBATTERY_LED_STATUS=4
-				led_con_status 5			
+				LASTBATTERY_LED_STATUS=5
+				led_con_status $LASTBATTERY_LED_STATUS			
 				;;	
 				Event*_DownLevel_BatteryLevel)
 				LASTBATTERY_LED_STATUS=1
-				led_con_status 1			
+				led_con_status $LASTBATTERY_LED_STATUS			
 				;;	
 				Event*_MidLevel_BatteryLevel)
 				LASTBATTERY_LED_STATUS=3
-				led_con_status 3			
+				led_con_status $LASTBATTERY_LED_STATUS			
 				;;	
 			esac
 
