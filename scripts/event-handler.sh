@@ -40,16 +40,16 @@ do
 		read -t 2 line <> "$PIPEFILE"
 		if [ -n "$line" ];then
 			case $line in
-				Event2_UpLevel_DoseRate)
+				Event*_UpLevel_DoseRate)
 				led_con_status 1			
 				echo -1000 > ${PWMDEV}
 				echo 50 > ${PWMDEV}
 				;;	
-				Event2_DownLevel_DoseRate)
+				Event*_DownLevel_DoseRate)
 				led_con_status ${LASTBATTERY_LED_STATUS}
 				echo 0 > ${PWMDEV}
 				;;	
-				Event3_ValueChange_DoseRate)
+				Event*_MidLevel_DoseRate)
 				led_con_status ${LASTBATTERY_LED_STATUS}
 				echo 0 > ${PWMDEV}
 				;;	
@@ -66,15 +66,15 @@ do
 #				led_con_status ${LASTBATTERY_LED_STATUS}
 #				echo 0 > ${PWMDEV}
 #				;;	
-				Event2_UpLevel_BatteryLevel)
+				Event*_UpLevel_BatteryLevel)
 				LASTBATTERY_LED_STATUS=4
 				led_con_status 5			
 				;;	
-				Event2_DownLevel_BatteryLevel)
+				Event*_DownLevel_BatteryLevel)
 				LASTBATTERY_LED_STATUS=1
 				led_con_status 1			
 				;;	
-				Event3_ValueChange_BatteryLevel)
+				Event*_MidLevel_BatteryLevel)
 				LASTBATTERY_LED_STATUS=3
 				led_con_status 3			
 				;;	
