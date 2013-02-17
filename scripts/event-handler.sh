@@ -53,19 +53,19 @@ do
 				led_con_status ${LASTBATTERY_LED_STATUS}
 				echo 0 > ${PWMDEV}
 				;;	
-				Event2_UpLevel_DoseAccum)
-				led_con_status 1			
-				echo -1000 > ${PWMDEV}
-				echo 50 > ${PWMDEV}
-				;;	
-				Event2_DownLevel_DoseAccum)
-				led_con_status ${LASTBATTERY_LED_STATUS}
-				echo 0 > ${PWMDEV}
-				;;	
-				Event3_ValueChange_DoseRate)
-				led_con_status ${LASTBATTERY_LED_STATUS}
-				echo 0 > ${PWMDEV}
-				;;	
+#				Event2_UpLevel_DoseAccum)
+#				led_con_status 1			
+#				echo -1000 > ${PWMDEV}
+#				echo 50 > ${PWMDEV}
+#				;;	
+#				Event2_DownLevel_DoseAccum)
+#				led_con_status ${LASTBATTERY_LED_STATUS}
+#				echo 0 > ${PWMDEV}
+#				;;	
+#				Event3_ValueChange_DoseAccum)
+#				led_con_status ${LASTBATTERY_LED_STATUS}
+#				echo 0 > ${PWMDEV}
+#				;;	
 				Event2_UpLevel_BatteryLevel)
 				LASTBATTERY_LED_STATUS=4
 				led_con_status 5			
