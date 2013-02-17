@@ -1079,7 +1079,18 @@ int meas_to_JSON(uint16_t sensors_bitmap)
 			value_change_flag[cur_reg] = 0;
 
 			#ifdef PIPES_WR
-			sprintf(pipe_wr_buf, "Event3_ValueChange_%s\n", sensor_type_str[cur_reg ]);
+			switch(reg_lvls[cur_reg].lvl)
+			{
+				case MID_LVL:
+					sprintf(pipe_wr_buf, "Event3_ValueChange_MidLevel_%s\n", sensor_type_str[cur_reg ]);
+					break;
+				case UP_LVL:
+					sprintf(pipe_wr_buf, "Event3_ValueChange_UpLevel_%s\n", sensor_type_str[cur_reg ]);
+					break;
+				case DOWN_LVL:
+					sprintf(pipe_wr_buf, "Event3_ValueChange_DownLevel_%s\n", sensor_type_str[cur_reg ]);
+					break;
+			}
 			new_pipe_wr = 1;
 			#endif
 
