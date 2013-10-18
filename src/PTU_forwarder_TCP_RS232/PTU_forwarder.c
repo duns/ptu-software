@@ -171,6 +171,34 @@ int main (void)
 	pipe_write = open(PIPE_WRITE, O_RDWR);
 	#endif
 
+	#ifdef TCP_CONN
+	time_t local_time_secs;
+	struct tm * timeinfo_debug;
+	char  txt_buf[20];
+	uint16_t regs_send_bmp=0xffff;
+	int jason_len = levels_to_JSON(regs_send_bmp);
+	frame_id++;
+	if ( !send_msg_to_tcp(json_msg, jason_len) )
+	{
+		init_tcp_conn();
+		#ifdef DEBUG
+		printf("Debug: Try to initialize TCP.\n");
+		#endif
+	}
+	else
+	{
+		#ifdef DEBUG
+		local_time_secs = time(NULL);
+		timeinfo_debug = localtime ( &local_time_secs );
+		sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d",
+		timeinfo_debug->tm_mday, (timeinfo_debug->tm_mon+1), (timeinfo_debug->tm_year+1900),
+		timeinfo_debug->tm_hour, timeinfo_debug->tm_min, timeinfo_debug->tm_sec);
+		printf("%s - Debug: JSON New Values transmitted, %s, frame_id:%d\n",txt_buf,unit,frame_id);
+		#endif
+	}
+	if (json_msg != NULL) free(json_msg);
+	#endif
+
 	while(1)
 	{
         ftime(&tp1);
@@ -733,7 +761,9 @@ int read_conf_settings()
 				fscanf(conf_file, SAMPLE_RATE_CONF_LINE, &reg_timers[cur_reg].period) != 1 ||
 				fscanf(conf_file, UP_LVL_CONF_LINE, &reg_lvls[cur_reg].up_thres) != 1 ||
 				fscanf(conf_file, DOWN_LVL_CONF_LINE, &reg_lvls[cur_reg].down_thres) != 1 ||
-				fscanf(conf_file, VAL_CHANGE_CONF_LINE, &reg_lvls[cur_reg].val_change_thres) != 1)
+				fscanf(conf_file, VAL_CHANGE_CONF_LINE, &reg_lvls[cur_reg].val_change_thres) != 1 ||
+				fscanf(conf_file, SLOPE_CONF_LINE, &reg_lvls[cur_reg].slope) != 1 ||
+				fscanf(conf_file, OFFSET_CONF_LINE, &reg_lvls[cur_reg].offset) != 1)
 		{
 			#ifdef ERROR_VERB
 			perror("Error reading config file - sensor parameters:");
@@ -790,7 +820,9 @@ int write_conf_settings()
 			(sum +=fprintf(conf_file, SAMPLE_RATE_CONF_LINE, reg_timers[cur_reg].period)) <= 0 ||
 			(sum +=fprintf(conf_file, UP_LVL_CONF_LINE, reg_lvls[cur_reg].up_thres)) <= 0 ||
 			(sum +=fprintf(conf_file, DOWN_LVL_CONF_LINE, reg_lvls[cur_reg].down_thres)) <= 0 ||
-			(sum +=fprintf(conf_file, VAL_CHANGE_CONF_LINE, reg_lvls[cur_reg].val_change_thres)) <= 0)
+			(sum +=fprintf(conf_file, VAL_CHANGE_CONF_LINE, reg_lvls[cur_reg].val_change_thres)) <= 0 ||
+			(sum +=fprintf(conf_file, SLOPE_CONF_LINE, reg_lvls[cur_reg].slope)) <= 0 ||
+			(sum +=fprintf(conf_file, OFFSET_CONF_LINE, reg_lvls[cur_reg].offset)) <= 0)
 		{ 
 			#ifdef ERROR_VERB
 			perror("Error writing config file - sensor parameters:");
@@ -995,6 +1027,79 @@ uint16_t read_registers(uint16_t regs_bitmap)
 	return regs_bitmap;
 }
 
+/*
+ * Forms the JSON message containing the levels for
+ * the sensor registers indicated by sensors_bitmap parameter. 
+ */
+int levels_to_JSON(uint16_t sensors_bitmap)
+{
+	int cur_reg;
+	json_t *entry, *array_elem, *array;
+	char  txt_buf[20], *text, *meas_unit, * sensor;
+	struct tm * timeinfo;
+	time_t local_time_secs;
+	
+	entry = json_new_object();
+	array = json_new_array();
+	
+	json_insert_pair_into_object(entry, "Sender", json_new_string(unit));
+	json_insert_pair_into_object(entry, "Receiver", json_new_string("Broadcast"));
+	sprintf(txt_buf,"%d", frame_id);
+	json_insert_pair_into_object(entry, "FrameID", json_new_string(txt_buf));
+	json_insert_pair_into_object(entry, "Acknowledge", json_new_string("False"));
+	
+	array_elem = json_new_object();
+	json_insert_pair_into_object(array_elem, "Type", json_new_string("GeneralConfiguration"));
+	local_time_secs=time(NULL);
+	timeinfo = localtime ( &local_time_secs );
+	sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d", 
+	timeinfo->tm_mday, (timeinfo->tm_mon+1), (timeinfo->tm_year+1900),
+	timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+	json_insert_pair_into_object(array_elem, "Time", json_new_string(txt_buf));
+	strncpy(txt_buf,dos_id,6);
+	txt_buf[6]='\0';
+	json_insert_pair_into_object(array_elem, "DosimeterID", json_new_string(txt_buf));
+	json_insert_child(array, array_elem);
+	//measurements
+	for(cur_reg = 0; cur_reg < NO_OF_REGISTERS; cur_reg++)
+	{
+		if( !(sensors_bitmap & (1<<cur_reg)) ) 
+		{
+			continue;
+		}
+		array_elem = json_new_object();
+		json_insert_pair_into_object(array_elem, "Type", json_new_string("MeasurementConfiguration"));
+		sensor = sensor_type_str[cur_reg];
+		json_insert_pair_into_object(array_elem, "Sensor", json_new_string(sensor));
+		timeinfo = localtime ( &local_time_secs );
+		sprintf(txt_buf, "%02d/%02d/%4d %02d:%02d:%02d", 
+		timeinfo->tm_mday, (timeinfo->tm_mon+1), (timeinfo->tm_year+1900),
+		timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+		json_insert_pair_into_object(array_elem, "Time", json_new_string(txt_buf));
+		meas_unit = meas_units[cur_reg];
+		json_insert_pair_into_object(array_elem, "Unit", json_new_string(meas_unit));
+		sprintf(txt_buf, "%g",  (float)reg_timers[cur_reg].period);
+		json_insert_pair_into_object(array_elem, "SamplingRate", json_new_string(txt_buf));
+		sprintf(txt_buf, "%g", reg_lvls[cur_reg].up_thres);
+		json_insert_pair_into_object(array_elem, "UpThreshold", json_new_string(txt_buf));
+		sprintf(txt_buf, "%g", reg_lvls[cur_reg].down_thres);
+		json_insert_pair_into_object(array_elem, "DownThreshold", json_new_string(txt_buf));
+		sprintf(txt_buf, "%g", reg_lvls[cur_reg].slope);
+		json_insert_pair_into_object(array_elem, "Slope", json_new_string(txt_buf));
+		sprintf(txt_buf, "%g", reg_lvls[cur_reg].offset);
+		json_insert_pair_into_object(array_elem, "Offset", json_new_string(txt_buf));
+		
+		json_insert_child(array, array_elem);
+	}
+	json_insert_pair_into_object(entry, "Messages", array);
+	json_tree_to_string(entry, &text);
+	json_msg = (char *)malloc((strlen(text) +1));
+	bcopy(text, json_msg, (strlen(text) +1));
+	// clean up
+	json_free_value(&entry);
+	if (text != NULL) free(text);
+	return (strlen(json_msg) +1);
+}
 /*
  * Forms the JSON message containing the measurements and events for
  * the sensor registers indicated by sensors_bitmap parameter. 
@@ -1872,6 +1977,9 @@ void handle_modbus_pkg()
 				regs_send_bmp = expired_send_timers();
 
 				n= registers[j].register_id-1;
+/* SLOPE AND OFFSET ADJUSTMENT: calibrated value = slope*value + offset    */				
+				registers[j].value.val=registers[j].value.val*reg_lvls[n].slope+reg_lvls[n].offset;
+/*    */				
 				if (fabsf(registers[j].value.val - last_value_change[n]) >= reg_lvls[n].val_change_thres)
 				{
 					last_value_change[n] = registers[j].value.val;

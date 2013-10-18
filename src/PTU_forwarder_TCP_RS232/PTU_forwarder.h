@@ -23,6 +23,8 @@
 #define UP_LVL_PARAM_NAME "UpLevel"
 #define DOWN_LVL_PARAM_NAME "DownLevel"
 #define VAL_CHANGE_PARAM_NAME "ValueChangeThres"
+#define SLOPE_PARAM_NAME "Slope"
+#define OFFSET_PARAM_NAME "Offset"
 
 #define SENSOR_REG_TYPE_LINE "#%s\n"
 #define SAMPLE_RATE_CONF_LINE SAMPLE_RATE_PARAM_NAME ": %u\n"
@@ -30,6 +32,8 @@
 #define UP_LVL_CONF_LINE UP_LVL_PARAM_NAME ": %f\n"
 #define DOWN_LVL_CONF_LINE DOWN_LVL_PARAM_NAME ": %f\n"
 #define VAL_CHANGE_CONF_LINE VAL_CHANGE_PARAM_NAME ": %f\n"
+#define SLOPE_CONF_LINE SLOPE_PARAM_NAME ": %f\n"
+#define OFFSET_CONF_LINE OFFSET_PARAM_NAME ": %f\n"
 #define MAX_LINE_SIZE 50
 
 #define SELECT_TIMEOUT 100000	//usec
@@ -69,6 +73,8 @@ typedef struct
   float up_thres;
   float down_thres;
   float val_change_thres;
+  float slope;
+  float offset;
 } reg_level_info;
 
 typedef struct
@@ -109,6 +115,7 @@ void write_dos_id (void);
 void CO2_calibrate(void);
 int handle_msg_from_server();
 int parse_json_msg();
+int levels_to_JSON(uint16_t sensors_bitmap);
 int meas_to_JSON(uint16_t sensors_bitmap);
 int alert_to_JSON ();
 int ack_to_JSON (char * frame_ack);
