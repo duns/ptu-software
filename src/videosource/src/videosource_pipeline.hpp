@@ -139,7 +139,15 @@ namespace video_source
 			create_add_element( root_bin, elements, "clockoverlay", "clockoverlay" );
 			create_add_element( root_bin, elements, "mpegtsmux", "mux" );
 			create_add_element( root_bin, elements, "identity", "identity" );
-			create_add_element( root_bin, elements, "tcpclientsink", "networksink" );
+		
+			if( !opts_map["connection.transfer-protocol"].as<std::string>().compare( std::string( "TCP" ) ) )
+			{
+				create_add_element( root_bin, elements, "tcpclientsink", "networksink" );
+			}
+			else if( !opts_map["connection.transfer-protocol"].as<std::string>().compare( std::string( "UDP" ) ) )
+			{
+				create_add_element( root_bin, elements, "udpsink", "networksink" );
+			}
 
 			g_object_set( G_OBJECT( elements["networksink"] )
 				, "host"             , opts_map["connection.remote-host"].as<std::string>().c_str()
@@ -150,7 +158,7 @@ namespace video_source
 				, "preroll-queue-len", opts_map["connection.preroll-queue-len"].as<unsigned int>()
 				, "blocksize"        , opts_map["connection.blocksize"].as<unsigned int>()
 				, NULL );
-
+			
 			if( !opts_map["videosource.use-dummy-source"].as<bool>() )
 			{
 				g_object_set( G_OBJECT( elements["videosrc"] )

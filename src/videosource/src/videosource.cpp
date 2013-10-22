@@ -101,6 +101,7 @@ main( int argc, char* argv[] )
 			( "connection.sync"                 , app_opts::value<bool>()        , "" )
 			( "connection.preroll-queue-len"    , app_opts::value<unsigned int>(), "" )
 			( "connection.blocksize"            , app_opts::value<unsigned int>(), "" )
+			( "connection.transfer-protocol"    , app_opts::value<std::string>() , "" )	
 			( "videofilter.video-header"        , app_opts::value<std::string>() , "" )
 			( "videofilter.width"               , app_opts::value<int>()         , "" )
 			( "videofilter.height"              , app_opts::value<int>()         , "" )
@@ -212,7 +213,7 @@ main( int argc, char* argv[] )
 
 		g_signal_connect( videosource.elements["identity"], "handoff", G_CALLBACK( identity_handler )
 					, static_cast<gpointer>( &d_params ) );
-
+		
 		LOG_CLOG( log_info ) << "Initializing level 1 watchdog...";
 
 		auto l1_watch_cfg = boost::bind( l1_watch_loop, &videosource, &l1_mutex, buffers_info
